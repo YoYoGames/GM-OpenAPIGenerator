@@ -21,7 +21,7 @@ namespace GMSwaggerCodeGen.Emitters.Gml
             httpEvent.Section("Http Event (auto-generated, DO NOT EDIT)").Line();
             EmitHttpEvent(httpEvent, ir, n);
             httpEvent.Line();
-            File.WriteAllText(Path.Combine(dir, "constroller_http.gml"), httpEvent.ToString());
+            File.WriteAllText(Path.Combine(dir, "controller_http.gml"), httpEvent.ToString());
 
             var cleanUpEvent = CodeWriter.From(new IndentedStringBuilder());
             cleanUpEvent.Section("Clean Up Event (auto-generated, DO NOT EDIT)").Line();
@@ -93,7 +93,23 @@ namespace GMSwaggerCodeGen.Emitters.Gml
                 /// @ignore
                 type_converters = { };
                 type_converters[$ "*/*"] = function(_i) { return _i; };
-                type_converters[$ "application/json"] = function(_i) { return json_stringify(_i); };
+                type_converters[$ "application/json"] = function(_i) { 
+                    return json_stringify(_i, false, function(_key, _value) {
+                        // This is an helper function to remove undefined from structs
+                	    static __strip = function(_key, _value) {
+                		    if (is_undefined(_value)) return;
+                		    self[$ _key] = _value;
+                	    }
+                        // If we find a struct we create a new one with stripped undefined values
+                	    if (is_struct(_value)) {
+                            with({}) { // This is the most performant way to change context
+                	            struct_foreach(_value, __strip);
+                	            return self;		
+                            }
+                	    }
+                	    return _value; // We return the value as normal
+                    }); 
+                };
                 type_converters[$ "application/x-www-form-urlencoded"] = function(_i) { return _i; };
                 type_converters[$ "text/plain"] = function(_i) { return string(_i) };
 
