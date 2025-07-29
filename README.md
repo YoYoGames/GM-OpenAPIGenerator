@@ -89,7 +89,7 @@ The content includes:
   Each OpenAPI `#/components/schemas/*` object becomes:
 
 ```gml
-function <Namespace>User(_id, _level, _name = undefined, ...) constructor
+function GmUser(_id, _level, _name = undefined, ...) constructor
 {
     id = _id;
     level = _level;
@@ -101,7 +101,7 @@ function <Namespace>User(_id, _level, _name = undefined, ...) constructor
     /// @param {String} _where
     /// @ignore
     static validate = function (_where = _GMFUNCTION_) {
-        _where = $"{_where} :: <Namespace>User.validate";
+        _where = $"{_where} :: GmUser.validate";
         // type checks (optional only when defined)
         ...
         return true;
@@ -113,24 +113,27 @@ function <Namespace>User(_id, _level, _name = undefined, ...) constructor
   One per OpenAPI operation. Example:
 
 ```gml
-/// @func <namespace>_save_data_list()
+/// @func gm_save_data_list()
 /// @param {Real} _offset
 /// @param {Real} _count
 /// @param {String} _user_id
 /// @param {Function} _callback
-function <namespace>_save_data_list(_offset = undefined, _count = undefined, _user_id = undefined, _callback = undefined) {
+function gm_save_data_list(_offset = undefined, _count = undefined, _user_id = undefined, _callback = undefined) {
     // argument validation
     ...
     // build URL
-    var _url = $"{<NAMESPACE>_SERVER_URL}/save_data";
+    var _url = $"{GM_SERVER_URL}/save_data";
     // query params
     var _params = { offset : _offset, count : _count, userId : _user_id };
     // auth schemes permitted for this endpoint
     var _security = ["auth_bearer", "session_secret"];
     // make request
-    return _<namespace>_create_request(_url, _params, "GET", undefined, undefined, _security, _callback, _GMFUNCTION_);
+    return _gm_create_request(_url, _params, "GET", undefined, undefined, _security, _callback, _GMFUNCTION_);
 }
 ```
+
+> [!NOTE]
+> Where the prefixes `gm`, `Gm` and `GM` are based on the provided command line `--prefix` to avoid naming collisions.
 
 ## Requirements
 
