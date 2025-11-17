@@ -1,6 +1,5 @@
 ﻿using CodeGenCore.Writers;
 using CodeGenCore.Writers.CoreExtensions;
-using CodeGenCore.Writers.Lang.Cpp;
 using CodeGenCore.Writers.Lang.CStyle;
 using CodeGenCore.Writers.Lang.Gml;
 using GMSwaggerCodeGen.Helpers;
@@ -68,7 +67,7 @@ namespace GMSwaggerCodeGen.Emitters.Gml
             .Function($"{n.Priv}request_auth_set_token", ["_token_id", "_token"], body =>
             {
                 body.Assign("_instance", expr => expr.Call($"{n.Priv}get_singleton", "_GMFUNCTION_"), VariableScope.Local)
-                .Assign(lhs => lhs.Access("_instance.auth_tokens", AccessorKind.Struct, "_token_id"), "_token");
+                .Assign(lhs: lhs => lhs.Access("_instance.auth_tokens", AccessorKind.Struct, "_token_id"), "_token", VariableScope.None);
             })
             .Line();
 
@@ -105,7 +104,7 @@ namespace GMSwaggerCodeGen.Emitters.Gml
             .Function($"{n.Priv}request_body_set_converter", ["_content_type", "_function"], body =>
             {
                 body.Assign("_instance", expr => expr.Call($"{n.Priv}get_singleton", "_GMFUNCTION_"), VariableScope.Local)
-                .Assign(lhs => lhs.Access("_instance.type_converters", AccessorKind.Struct, "_content_type"), "_function");
+                .Assign(lhs: lhs => lhs.Access("_instance.type_converters", AccessorKind.Struct, "_content_type"), "_function");
             })
             .Line();
 
@@ -137,7 +136,7 @@ namespace GMSwaggerCodeGen.Emitters.Gml
             .Function($"{n.Priv}request_response_set_hook", ["_code", "_hook"], body =>
             {
                 body.Assign("_instance", expr => expr.Call($"{n.Priv}get_singleton", "_GMFUNCTION_"), VariableScope.Local)
-                .Assign(lhs => lhs.Access("_instance.response_hooks", AccessorKind.Map, "_code"), "_hook");
+                .Assign(lhs: lhs => lhs.Access("_instance.response_hooks", AccessorKind.Map, "_code"), "_hook");
             })
             .Line();
 
@@ -231,11 +230,11 @@ namespace GMSwaggerCodeGen.Emitters.Gml
                             // inject security tokens lazily
                             var _count = array_length(security);
                             for (var _i = 0; _i < _count; _i++) {
-                                _apply_auth(_header, _params, security[_i], where);
+                                _self._apply_auth(_header, _params, security[_i], where);
                     		}
 
                             // build final url from cached params
-                            var _url = _build_url(url, _params);
+                            var _url = _self._build_url(url, _params);
 
                             if (!is_undefined(body))
                             {
@@ -292,7 +291,7 @@ namespace GMSwaggerCodeGen.Emitters.Gml
                      */
                     static _process_body = function(_body, _content_type, _where)
                     {
-                        var _body_converter = _gm_request_body_get_converter(_content_type);
+                        var _body_converter = {{n.Priv}}request_body_get_converter(_content_type);
                         if (!is_callable(_body_converter)) 
                         {
                             show_error($"{_where} :: No converter for '{_content_type}'.", true);
