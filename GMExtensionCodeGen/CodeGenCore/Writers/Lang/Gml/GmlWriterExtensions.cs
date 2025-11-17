@@ -49,6 +49,8 @@ namespace CodeGenCore.Writers.Lang.Gml
 
         public static ICodeWriter Assign(this ICodeWriter io, string identifier, Action<ICodeWriter> lhs, VariableScope scope = VariableScope.None) => io.Assign(w => w.Append(identifier), lhs, scope);
 
+        public static ICodeWriter Assign(this ICodeWriter io, Action<ICodeWriter> lhs, string value, VariableScope scope = VariableScope.None) => io.Assign(lhs, w => w.Append(value), scope);
+
         public static ICodeWriter Assign(this ICodeWriter io, Action<ICodeWriter> lhs, Action<ICodeWriter> rhs, VariableScope scope = VariableScope.None)
         {
             var prefix = scope switch
