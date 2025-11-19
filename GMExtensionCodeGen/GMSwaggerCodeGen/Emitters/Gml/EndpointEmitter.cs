@@ -88,15 +88,30 @@ namespace GMSwaggerCodeGen.Emitters.Gml
                 }
 
                 /* security */
-                var secId = ep.Auth is IrNoAuth ? "undefined" : "_security";
-                if (ep.Auth is not IrNoAuth)
+
+                // Rules:
+                // - only 1 auth entry and it's IrNoAuth -> no `_security` declaration, pass `undefined`
+                // - otherwise: always declare `_security` and map IrNoAuth -> undefined, others -> "<name>"
+
+                var authCount = ep.Auth.Length;
+                var singleNoAuth = authCount == 1 && ep.Auth[0] is IrNoAuth;
+
+                // If it's a single NoAuth, we never declare `_security`,
+                // and the argument passed to create_request will be the literal `undefined`
+                var secId = singleNoAuth ? "undefined" : "_security";
+
+                if (!singleNoAuth)  // if there are auths
                 {
                     fn.Comment("create required security array");
-                    fn.Assign(secId, "[ " + string.Join(", ", Schemes(ep.Auth!).Select(s => $"\"{s}\"")) + " ]", VariableScope.Local).Line();
+                    // Each entry is already a JS expression: either "undefined" or "\"name\""
+                    var entries = ep.Auth
+                        .Select(Schemes)   // Schemes returns JS tokens
+                        .ToArray();
+
+                    fn.Assign(secId, "[ " + string.Join(", ", entries) + " ]", VariableScope.Local).Line();
                 }
 
-                fn.Return(r => r.Call($"{n.Priv}create_request",
-                         ["_url", paramId, $"\"{ep.Verb}\"",
+                fn.Return(r => r.Call($"{n.Priv}create_request", ["_url", paramId, $"\"{ep.Verb}\"",
                       needsBody ? "_body" : "undefined",
                       ctId, secId, "_callback", "_GMFUNCTION_"]));
             })
@@ -106,14 +121,18 @@ namespace GMSwaggerCodeGen.Emitters.Gml
         private static string CleanPath(IrHttpEndpoint ep) =>
             PathVar.Replace(ep.PathTemplate, m => $"{{{NameUtils.ParamName(m.Groups[1].Value)}}}");
 
-        private static IEnumerable<string> Schemes(IrAuthRequirement req) => req switch
+        private static string Schemes(IrAuthRequirement req) => req switch
         {
-            IrNoAuth => [],
-            IrBasicAuth b => [b.Name],
-            IrBearerAuth b => [b.Name],
-            IrApiKeyAuth k => [k.Name],
-            IrOAuth2Auth o => [o.Name],
-            _ => []
+            // NoAuth maps to JS `undefined`
+            IrNoAuth => "undefined",
+
+            // Others map to JS string literals
+            IrBasicAuth b => $"\"{b.Name}\"",
+            IrBearerAuth b => $"\"{b.Name}\"",
+            IrApiKeyAuth k => $"\"{k.Name}\"",
+            IrOAuth2Auth o => $"\"{o.Name}\"",
+
+            _ => string.Empty
         };
     }
 

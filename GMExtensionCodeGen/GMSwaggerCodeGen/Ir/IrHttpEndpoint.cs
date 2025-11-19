@@ -10,7 +10,7 @@ namespace GMSwaggerCodeGen.Ir
         ImmutableArray<IrParam> Parameters,
         IrRequestBody? Body,          // optional body spec
         IrType? ResponseSchema,
-        IrAuthRequirement? Auth,
+        ImmutableArray<IrAuthRequirement> Auth,
         string? Summary = null,   // operation.summary
         string? Description = null);  // operation.description
 }

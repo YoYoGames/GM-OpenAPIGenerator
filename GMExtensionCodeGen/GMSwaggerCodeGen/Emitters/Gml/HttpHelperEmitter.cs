@@ -415,6 +415,7 @@ namespace GMSwaggerCodeGen.Emitters.Gml
                                 }
                             });
                         }
+                        sw.Case("undefined", body => { }, true);
                         sw.Default(d => d.Line("show_debug_message($\"{_where} :: No auth rule for '{_scheme}'.\");"));
                     });
                 }), VariableScope.Static)

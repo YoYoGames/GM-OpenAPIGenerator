@@ -121,29 +121,70 @@ namespace GMSwaggerCodeGen.Parsing.OpenApi
             return null;                                // no JSON response
         }
 
-        private IrAuthRequirement ResolveAuth(OpenApiOperation op)
+        private ImmutableArray<IrAuthRequirement> ResolveAuth(OpenApiOperation op)
         {
-            if (op.Security is { Count: > 0 }) return MapReq(op.Security[0]);
-            if (_doc.Security is { Count: > 0 }) return MapReq(_doc.Security[0]);
-            return new IrNoAuth();
-
-            IrAuthRequirement MapReq(OpenApiSecurityRequirement r)
+            // Operation-level security overrides global security:
+            // - null  → fall back to document
+            // - empty → explicitly "no auth"
+            if (op.Security is not null)
             {
-                var scheme = r.Keys.First();               // pick first
+                if (op.Security.Count == 0)
+                    return [new IrNoAuth()];
+
+                return MapReqs(op.Security);
+            }
+
+            if (_doc.Security is { Count: > 0 })
+                return MapReqs(_doc.Security);
+
+            return [new IrNoAuth()];
+
+            // Map a whole list of OpenApiSecurityRequirement → list of IrAuthRequirement
+            ImmutableArray<IrAuthRequirement> MapReqs(IList<OpenApiSecurityRequirement> requirements)
+            {
+                var builder = ImmutableArray.CreateBuilder<IrAuthRequirement>();
+
+                foreach (var r in requirements)
+                {
+                    foreach (var scheme in r.Keys)
+                    {
+                        var mapped = MapSingle(scheme, r);
+                        if (mapped is not IrNoAuth)
+                            builder.Add(mapped);
+                    }
+                }
+
+                // If we couldn’t map anything, fall back to explicit "no auth"
+                if (builder.Count == 0)
+                    builder.Add(new IrNoAuth());
+
+                return builder.ToImmutable();
+            }
+
+            IrAuthRequirement MapSingle(OpenApiSecuritySchemeReference scheme, OpenApiSecurityRequirement r)
+            {
                 if (scheme is null) return new IrNoAuth();
 
-                var s = _doc.Components?.SecuritySchemes?[scheme.Reference.Id ?? string.Empty];
+                var id = scheme.Reference.Id ?? string.Empty;
+                var s = _doc.Components?.SecuritySchemes?[id];
                 if (s is null) return new IrNoAuth();
-                
+
                 return s.Type switch
                 {
-                    SecuritySchemeType.Http when s.Scheme == "basic" => new IrBasicAuth(scheme.Reference.Id!),
-                    SecuritySchemeType.Http when s.Scheme == "bearer" => new IrBearerAuth(scheme.Reference.Id!),
-                    SecuritySchemeType.ApiKey =>
-                        new IrApiKeyAuth(scheme.Reference.Id!,
-                                         s.In == ParameterLocation.Header ? IrLocation.Header : IrLocation.Query),
-                    SecuritySchemeType.OAuth2 =>
-                        new IrOAuth2Auth(scheme.Reference.Id!, [.. r[scheme]]),
+                    SecuritySchemeType.Http when s.Scheme == "basic"
+                        => new IrBasicAuth(id),
+
+                    SecuritySchemeType.Http when s.Scheme == "bearer"
+                        => new IrBearerAuth(id),
+
+                    SecuritySchemeType.ApiKey
+                        => new IrApiKeyAuth(
+                               id,
+                               s.In == ParameterLocation.Header ? IrLocation.Header : IrLocation.Query),
+
+                    SecuritySchemeType.OAuth2
+                        => new IrOAuth2Auth(id, [.. r[scheme]]),
+
                     _ => new IrNoAuth()
                 };
             }
