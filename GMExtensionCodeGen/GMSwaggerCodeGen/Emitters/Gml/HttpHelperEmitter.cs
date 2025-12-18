@@ -11,7 +11,7 @@ namespace GMSwaggerCodeGen.Emitters.Gml
     {
         public static void Emit(IrWebCompilation ir, ICodeWriter w, GmlNaming n) 
         {
-            EmitMacrosHelper(w, ir, n);
+            EmitOptionsHelper(w, ir, n);
             w.Line();
             EmitUtilsHelper(w, ir, n);
             w.Line();
@@ -19,10 +19,21 @@ namespace GMSwaggerCodeGen.Emitters.Gml
             w.Line();
         }
 
-        private static void EmitMacrosHelper(ICodeWriter w, IrWebCompilation ir, GmlNaming n)
+        private static void EmitOptionsHelper(ICodeWriter w, IrWebCompilation ir, GmlNaming n)
         {
-            w.Line($"#macro {n.Mac}SERVER_URL \"http://localhost:8080/api/rest\"");
-            w.Line($"#macro {n.Mac}DEBUG true");
+            w.Lines($$"""           
+                /// @returns {String}
+                function {{n.Priv}}options_get_rest_url() {
+                	static _url = extension_get_option_value("{{n.StructPrefix}}", "server_rest_url");
+                	return _url;
+                }
+                
+                /// @returns {Bool}
+                function {{n.Priv}}options_is_debug() {
+                	static _enabled = bool(extension_get_option_value("{{n.StructPrefix}}", "debug_logging"));
+                	return _enabled;
+                }
+                """);
             w.Line();
         }
 

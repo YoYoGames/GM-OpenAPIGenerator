@@ -13,6 +13,12 @@ namespace GMSwaggerCodeGen.Emitters.Gml
     {
         private static readonly Regex PathVar = new(@"\{([^}]+)\}", RegexOptions.Compiled);
 
+        private static readonly string internalBaseUrlField = "__base_url__";
+        private static readonly string internalUrlField = "__url__";
+
+        private static readonly string internalContentTypeField = "__content_type__";
+        private static readonly string internalSecurityField = "__security__";
+
         public static void Emit(IrHttpEndpoint ep, ICodeWriter w, GmlNaming n)
         {
             var ordered = ep.Parameters.OrderByDescending(p => p.Required).ToList();
@@ -55,13 +61,18 @@ namespace GMSwaggerCodeGen.Emitters.Gml
             /* function */
             w.Function(fnName, sig, fn =>
             {
+                /* base user const */
+                fn.Assign(internalBaseUrlField, $"{n.Priv}options_get_rest_url()", VariableScope.Static).Line();
+
                 /* content-type const */
                 var ctId = "undefined";
                 if (needsBody)
                 {
-                    ctId = "_content_type";
+                    ctId = internalContentTypeField;
                     if (!ctChoice)
                         fn.Assign(ctId, $"\"{ep.Body!.DefaultMediaType}\"", VariableScope.Static).Line();
+                    else
+                        fn.Assign(ctId, $"_content_type").Line();
                 }
 
                 /* validation */
@@ -70,13 +81,13 @@ namespace GMSwaggerCodeGen.Emitters.Gml
                     CheckBuilder.Emit(fn, NameUtils.ParamName(p.Name), p.Type, p.Required, n, "_GMFUNCTION_");
 
                 if (needsBody) CheckBuilder.Emit(fn, "_body", ep.Body!.Schema, false, n, "_GMFUNCTION_");
-                if (ctChoice) CheckBuilder.Emit(fn, "_content_type", IrType.String, false, n, "_GMFUNCTION_");
+                if (ctChoice) CheckBuilder.Emit(fn, ctId, IrType.String, false, n, "_GMFUNCTION_");
                 CheckBuilder.Emit(fn, "_callback", IrType.Function, false, n, "_GMFUNCTION_");
                 fn.Line();
 
                 /* URL */
                 fn.Comment("build url path");
-                fn.Assign("_url", $"$\"{{{n.Mac}SERVER_URL}}{CleanPath(ep)}\"", VariableScope.Local).Line();
+                fn.Assign(internalUrlField, $"$\"{{{internalBaseUrlField}}}{CleanPath(ep)}\"", VariableScope.Local).Line();
 
                 /* query params */
                 var qs = ep.Parameters.Where(p => p.Location == IrLocation.Query).ToList();
@@ -90,15 +101,15 @@ namespace GMSwaggerCodeGen.Emitters.Gml
                 /* security */
 
                 // Rules:
-                // - only 1 auth entry and it's IrNoAuth -> no `_security` declaration, pass `undefined`
-                // - otherwise: always declare `_security` and map IrNoAuth -> undefined, others -> "<name>"
+                // - only 1 auth entry and it's IrNoAuth -> no `__security__` declaration, pass `undefined`
+                // - otherwise: always declare `__security__` and map IrNoAuth -> undefined, others -> "<name>"
 
                 var authCount = ep.Auth.Length;
                 var singleNoAuth = authCount == 1 && ep.Auth[0] is IrNoAuth;
 
-                // If it's a single NoAuth, we never declare `_security`,
+                // If it's a single NoAuth, we never declare `__security__`,
                 // and the argument passed to create_request will be the literal `undefined`
-                var secId = singleNoAuth ? "undefined" : "_security";
+                var secId = singleNoAuth ? "undefined" : internalSecurityField;
 
                 if (!singleNoAuth)  // if there are auths
                 {
@@ -111,7 +122,7 @@ namespace GMSwaggerCodeGen.Emitters.Gml
                     fn.Assign(secId, "[ " + string.Join(", ", entries) + " ]", VariableScope.Local).Line();
                 }
 
-                fn.Return(r => r.Call($"{n.Priv}create_request", ["_url", paramId, $"\"{ep.Verb}\"",
+                fn.Return(r => r.Call($"{n.Priv}create_request", [internalUrlField, paramId, $"\"{ep.Verb}\"",
                       needsBody ? "_body" : "undefined",
                       ctId, secId, "_callback", "_GMFUNCTION_"]));
             })

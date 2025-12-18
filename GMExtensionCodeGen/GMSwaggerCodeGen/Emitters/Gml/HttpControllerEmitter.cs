@@ -54,13 +54,19 @@ namespace GMSwaggerCodeGen.Emitters.Gml
                 // Early exit if the _request has not finished yet
                 if (_status == 1) exit;
 
-                if ({{n.Mac}}DEBUG) {
+                if ({{n.Priv}}_options_is_debug()) {
                 	var _encoded_async_load = json_encode(async_load);
                 	show_debug_message("HTTP: " + _encoded_async_load)
                 }
 
                 var _code = async_load[? "http_status"];
                 var _data = async_load[? "result"];
+
+                // Try to parse once
+                try {
+                	_data = json_parse(_data);
+                }
+                catch(_ex) { /* ignore it */ };
 
                 // Make sure we check for respose hooks for the given http code
                 var _hook = response_hooks[? _code];
@@ -73,10 +79,6 @@ namespace GMSwaggerCodeGen.Emitters.Gml
                 // Get callback for the request
                 var _callback = _request.get_callback();
                 if (is_callable(_callback)) {
-                	try {
-                		_data = json_parse(_data);
-                	}
-                	catch(_ex) { /* ignore it */ };
                 	_callback(_code, _data, _request);
                 }
 
