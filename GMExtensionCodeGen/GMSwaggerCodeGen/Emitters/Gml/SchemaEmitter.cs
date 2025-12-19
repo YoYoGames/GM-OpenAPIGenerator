@@ -75,6 +75,41 @@ namespace GMSwaggerCodeGen.Emitters.Gml
                 }
             }), VariableScope.Static);
         }
+
+
+        public static void EmitDocs(IrStruct s, ICodeWriter w, GmlNaming n) 
+        {
+            var fields = s.Fields.OrderByDescending(f => f.Required).ToList();
+            var ctorSig = fields.Select(f => f.Required
+                            ? NameUtils.ParamName(f.Name)
+                            : $"{NameUtils.ParamName(f.Name)} = undefined");
+
+            var structName = n.StructPrefix + s.Name;
+
+            w.JsDoc(b =>
+            {
+                b.Line($"@struct {structName}");
+                if (!string.IsNullOrEmpty(s.Description)) b.Summary(s.Description);
+                foreach (var f in fields)
+                {
+                    var desc = f.Description;
+                    if (f.Type.IsEnum)
+                    {
+                        var options = string.Join(" | ", f.Type.EnumLiterals!);
+                        desc = $"{desc?.Trim()} (one of: {options})";
+                    }
+
+                    var paramName = f.Required ? NameUtils.ParamName(f.Name) : $"[{NameUtils.ParamName(f.Name)}]";
+
+                    var typePart = $"{{{f.Type.JsDoc(n)}}} " ?? string.Empty;
+                    var descPart = f.Description ?? string.Empty;
+                    b.Line($"@member {typePart}{paramName} {descPart}".TrimEnd());
+                }
+                b.Line($"@struct_end");
+            });
+            w.Line();
+        }
+    
     }
 
 }

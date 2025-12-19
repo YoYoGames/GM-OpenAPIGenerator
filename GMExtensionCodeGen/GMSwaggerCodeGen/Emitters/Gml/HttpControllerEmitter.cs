@@ -54,7 +54,7 @@ namespace GMSwaggerCodeGen.Emitters.Gml
                 // Early exit if the _request has not finished yet
                 if (_status == 1) exit;
 
-                if ({{n.Priv}}_options_is_debug()) {
+                if ({{n.Priv}}options_is_debug()) {
                 	var _encoded_async_load = json_encode(async_load);
                 	show_debug_message("HTTP: " + _encoded_async_load)
                 }

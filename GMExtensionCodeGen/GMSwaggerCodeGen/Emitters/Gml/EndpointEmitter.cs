@@ -6,6 +6,7 @@ using CodeGenCore.Writers.Lang.Gml;
 using GMSwaggerCodeGen.Helpers;
 using GMSwaggerCodeGen.Ir;
 using System.Text.RegularExpressions;
+using System.Xml.Linq;
 
 namespace GMSwaggerCodeGen.Emitters.Gml
 {
@@ -145,6 +146,49 @@ namespace GMSwaggerCodeGen.Emitters.Gml
 
             _ => string.Empty
         };
-    }
 
+        public static void EmitDocs(IrHttpEndpoint ep, ICodeWriter w, GmlNaming n)
+        {
+            var ordered = ep.Parameters.OrderByDescending(p => p.Required).ToList();
+            var sig = ordered.Select(p => p.Required
+                        ? NameUtils.ParamName(p.Name)
+                        : $"{NameUtils.ParamName(p.Name)} = undefined")
+                 .ToList();
+
+            bool needsBody = ep.Body is not null;
+            bool ctChoice = needsBody && ep.Body!.HasChoice;
+
+            if (needsBody) sig.Add("_body = undefined");
+            if (ctChoice) sig.Add($"_content_type = \"{ep.Body!.DefaultMediaType}\"");
+            sig.Add("_callback = undefined");
+
+            var fnName = $"{n.Pub}{ep.Name}";
+
+            w.JsDoc(js =>
+            {
+                js.Line($"@func {fnName}");
+                if (!string.IsNullOrEmpty(ep.Description)) js.Summary(ep.Description);
+                foreach (var p in ordered)
+                {
+                    var desc = p.Description;
+                    if (p.Type.IsEnum)
+                    {
+                        var options = string.Join(" | ", p.Type.EnumLiterals!);
+                        desc = $"{desc?.Trim()}( one of: {options}).";
+                    }
+
+                    var paramName = p.Required ? NameUtils.ParamName(p.Name) : $"[{NameUtils.ParamName(p.Name)}]";
+                    js.Param(new ParamDoc(paramName, p.Type.JsDoc(n), desc));
+                }
+
+                if (needsBody) js.Param(new ParamDoc("[_body]", ep.Body!.Schema.JsDoc(n), "The body included in the the http request."));
+                if (ctChoice) js.Param(new ParamDoc("[_content_type]", "String", "The type of the body (this will be used by the mapper to convert the body input to the correct type)."));
+                js.Param(new ParamDoc("[_callback]", "Function", "The function that will be executed when upon request completion."));
+                js.Line($"@func_end");
+            });
+            w.Function(fnName, sig, fn => { });
+            w.Line();
+        }
+    }
 }
+

@@ -1,5 +1,6 @@
 ﻿using CommandLine;
 using GMSwaggerCodeGen.Emitters;
+using GMSwaggerCodeGen.Emitters.Docs;
 using GMSwaggerCodeGen.Emitters.Gml;
 using GMSwaggerCodeGen.Helpers;
 using GMSwaggerCodeGen.Parsing.OpenApi;
@@ -68,6 +69,9 @@ namespace GMSwaggerCodeGen
                 Console.WriteLine($"[CodeGen] {lang.ToUpper()} -> {targetDir}");
                 em.Emit(compilation, targetDir);
             }
+
+            var docEm = new DocEmitter(naming);
+            docEm.Emit(compilation, opt.Output);
 
             Console.WriteLine("[CodeGen] Success [x]");
             return 0;
