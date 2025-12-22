@@ -17,7 +17,6 @@ namespace GMSwaggerCodeGen.Emitters.Gml
                                         : $"{NameUtils.ParamName(f.Name)} = undefined");
 
             var structName = n.StructPrefix + s.Name;
-            var uid = StringHash.ToUInt32(structName).ToString();
 
             /* JSDoc */
             w.JsDoc(b =>
@@ -45,35 +44,33 @@ namespace GMSwaggerCodeGen.Emitters.Gml
                     var arg = NameUtils.ParamName(f.Name);
                     var lhs = NameUtils.IsValidIdent(f.Name) ? f.Name : $"self[$ \"{f.Name}\"]";
                     body.FieldAssign(lhs, arg);
-                }
-                body.Line();
-                body.Assign("__uid", uid, VariableScope.Static).Line();
-
-                EmitValidate(body, fields, n, structName);
+                }                
             })
             .Line();
         }
 
-        private static void EmitValidate(ICodeWriter body, IEnumerable<IrField> fields,
-                                         GmlNaming n, string structName)
+        public static void EmitValidation(IrStruct s, ICodeWriter w, GmlNaming n)
         {
-            body.JsDoc(js =>
+            var fields = s.Fields.OrderByDescending(f => f.Required).ToList();
+            var structName = n.StructPrefix + s.Name;
+
+            w.JsDoc(js =>
             {
-                js.Line("@func validate()");
+                js.Line($"@func {structName}_validate()");
+                js.Param(new ParamDoc("_inst", "Struct", "The struct to be validated."));
                 js.Param(new ParamDoc("_where", "String", "What is the callee of this function (used for debug)."));
                 js.Tag("ignore");
             });
 
-            body.Assign("validate", expr => expr.Method(["_where = _GMFUNCTION_"], fn =>
+            w.Function($"{structName}_validate", ["_inst", "_where = _GMFUNCTION_"], fn =>
             {
-                fn.Assign("_where", w => w.Append($"$\"{{_where}} :: {structName}.validate\"")).Line();
+                fn.Assign("_where", w => w.Append($"$\"{{_where}} :: {structName}_validate\"")).Line();
 
                 foreach (var f in fields)
                 {
-                    var acc = NameUtils.IsValidIdent(f.Name) ? f.Name : $"self[$ \"{f.Name}\"]";
-                    CheckBuilder.Emit(fn, acc, f.Type, f.Required, n, "_where");
+                    CheckBuilder.Emit(fn, $"_inst[$ \"{f.Name}\"]", f.Type, f.Required, n, "_where", f.Name);
                 }
-            }), VariableScope.Static);
+            }).Line();
         }
     
     }

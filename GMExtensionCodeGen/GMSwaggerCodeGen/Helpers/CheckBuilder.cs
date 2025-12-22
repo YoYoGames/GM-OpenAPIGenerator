@@ -8,8 +8,10 @@ namespace GMSwaggerCodeGen.Helpers
 {
     internal static class CheckBuilder
     {
-        public static void Emit(ICodeWriter w, string id, IrType t, bool required, GmlNaming n, string where = "_where")
+        public static void Emit(ICodeWriter w, string id, IrType t, bool required, GmlNaming n, string where = "_where", string? name = null)
         {
+            var displayName = string.IsNullOrEmpty(name) ? id : $"'{name}'";
+
             string pred = t switch
             {
                 _ when t.IsCollection => t.FixedLength is null ? $"!is_array({id})" : $"(!is_array({id}) || array_length({id}) != {t.FixedLength})",
@@ -18,10 +20,7 @@ namespace GMSwaggerCodeGen.Helpers
                 { Kind: IrTypeKind.Scalar } => $"!is_real({id})",
                 { Kind: IrTypeKind.Function } => $"!is_callable({id})",
                 { Kind: IrTypeKind.AnyMap } => $"!is_struct({id})",
-
-                { Kind: IrTypeKind.Struct } =>
-                    $"!is_struct({id}) || {id}[$ \"__uid\"] != {StringHash.ToUInt32($"{n.StructPrefix}{t.Name}")}",
-
+                { Kind: IrTypeKind.Struct } => $"!is_struct({id})",
                 _ => string.Empty
             };
 
@@ -31,7 +30,7 @@ namespace GMSwaggerCodeGen.Helpers
 
             if (required)
             {
-                w.Line($"if ({pred}) show_error($\"{{{where}}} :: {id.Replace("\"", "'")} expected {Display(t, n)}\", true);");
+                w.Line($"if ({pred}) show_error($\"{{{where}}} :: {displayName.Replace("\"", "'")} expected {Display(t, n)}\", true);");
                 if (isStruct) w.Line($"{id}.validate({where});");
             }
             else
@@ -40,13 +39,13 @@ namespace GMSwaggerCodeGen.Helpers
                 {
                     w.If($"!is_undefined({id})", body =>
                     {
-                        body.Line($"if ({pred}) show_error($\"{{{where}}} :: {id.Replace("\"", "'")} expected {Display(t, n)}\", true);");
-                        if (isStruct) body.Line($"{id}.validate({where});");
+                        body.Line($"if ({pred}) show_error($\"{{{where}}} :: {displayName.Replace("\"", "'")} expected {Display(t, n)}\", true);");
+                        if (isStruct) body.Line($"{n.StructPrefix}{t.Name}_validate({id}, {where});");
                     });
                 }
                 else 
                 {
-                    w.Line($"if (!is_undefined({id}) && {pred}) show_error($\"{{{where}}} :: {id.Replace("\"", "'")} expected {Display(t, n)}\", true);");
+                    w.Line($"if (!is_undefined({id}) && {pred}) show_error($\"{{{where}}} :: {displayName.Replace("\"", "'")} expected {Display(t, n)}\", true);");
                 }
             }
         }

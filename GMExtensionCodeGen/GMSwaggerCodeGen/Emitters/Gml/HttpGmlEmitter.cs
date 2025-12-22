@@ -21,6 +21,7 @@ namespace GMSwaggerCodeGen.Emitters.Gml
             var w = CodeWriter.From(new IndentedStringBuilder());
             w.Section("Schema Definitions (auto-generated, DO NOT EDIT)").Line();
             foreach (var s in ir.Structs) SchemaEmitter.Emit(s, w, _n);
+            foreach (var s in ir.Structs) SchemaEmitter.EmitValidation(s, w, _n);
             File.WriteAllText(Path.Combine(dir, "generated_schemas.gml"), w.ToString());
 
             // endpoints

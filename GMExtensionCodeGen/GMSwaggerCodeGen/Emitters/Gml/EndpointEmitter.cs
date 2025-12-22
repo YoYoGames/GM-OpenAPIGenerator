@@ -81,9 +81,9 @@ namespace GMSwaggerCodeGen.Emitters.Gml
                 foreach (var p in ordered)
                     CheckBuilder.Emit(fn, NameUtils.ParamName(p.Name), p.Type, p.Required, n, "_GMFUNCTION_");
 
-                if (needsBody) CheckBuilder.Emit(fn, "_body", ep.Body!.Schema, false, n, "_GMFUNCTION_");
-                if (ctChoice) CheckBuilder.Emit(fn, ctId, IrType.String, false, n, "_GMFUNCTION_");
-                CheckBuilder.Emit(fn, "_callback", IrType.Function, false, n, "_GMFUNCTION_");
+                if (needsBody) CheckBuilder.Emit(fn, "_body", ep.Body!.Schema, false, n, "_GMFUNCTION_", "_body");
+                if (ctChoice) CheckBuilder.Emit(fn, ctId, IrType.String, false, n, "_GMFUNCTION_", "_content_type");
+                CheckBuilder.Emit(fn, "_callback", IrType.Function, false, n, "_GMFUNCTION_", "_callback");
                 fn.Line();
 
                 /* URL */
