@@ -98,9 +98,9 @@ namespace GMSwaggerCodeGen.Emitters.Docs
                     js.Param(new ParamDoc(paramName, p.Type.JsDoc(n), desc));
                 }
 
-                if (needsBody) js.Param(new ParamDoc("[_body]", ep.Body!.Schema.JsDoc(n), "The body to be included in the the http request."));
-                if (ctChoice) js.Param(new ParamDoc("[_content_type]", "String", "The type of the body (this will be used by the mapper to convert the body argument to the correct type)."));
-                js.Param(new ParamDoc("[_callback]", "Function", "The function - with signature (status, data, request) - that will be executed upon request completion."));
+                if (needsBody) js.Param(new ParamDoc("_body", ep.Body!.Schema.JsDoc(n), "The body to be included in the http request.", true));
+                if (ctChoice) js.Param(new ParamDoc("_content_type", "String", "The type of the body (this will be used by the mapper to convert the body argument to the correct type).", true));
+                js.Param(new ParamDoc("_callback", "Function", "The function - with signature (status, data, request) - that will be executed upon request completion.", true));
                 js.Line($"@func_end");
             });
             w.Function(fnName, sig, fn => { });
