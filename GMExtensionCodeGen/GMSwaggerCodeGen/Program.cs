@@ -19,9 +19,9 @@ namespace GMSwaggerCodeGen
         public string Output { get; set; } = default!;
 
         [Option("lang",
-                HelpText = "Comma-separated list of targets (gml).",
+                HelpText = "Comma-separated list of targets (gml, docs).",
                 Separator = ',',
-                Default = new[] { "gml" })]
+                Default = new[] { "gml", "docs" })]
         public IEnumerable<string> Languages { get; set; } = default!;
 
         [Option("prefix", 
@@ -53,6 +53,7 @@ namespace GMSwaggerCodeGen
             var emitters = new Dictionary<string, IIrEmitter>(StringComparer.OrdinalIgnoreCase)
             {
                 ["gml"] = new HttpGmlEmitter(naming),
+                ["docs"] = new DocsEmitter(naming),
             };
 
             foreach (var lang in opt.Languages)
@@ -69,9 +70,6 @@ namespace GMSwaggerCodeGen
                 Console.WriteLine($"[CodeGen] {lang.ToUpper()} -> {targetDir}");
                 em.Emit(compilation, targetDir);
             }
-
-            var docEm = new DocEmitter(naming);
-            docEm.Emit(compilation, opt.Output);
 
             Console.WriteLine("[CodeGen] Success [x]");
             return 0;
