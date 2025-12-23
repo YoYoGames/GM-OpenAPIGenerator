@@ -21,13 +21,13 @@ namespace GMSwaggerCodeGen.Emitters.Docs
             var w = CodeWriter.From(new IndentedStringBuilder());
             w.Section("Schema Documentation (auto-generated, DO NOT EDIT)").Line();
             foreach (var s in ir.Structs) EmitSchemaDocs(s, w, _n);
-            File.WriteAllText(Path.Combine(dir, "schemas_doc.js"), w.ToString());
+            File.WriteAllText(Path.Combine(dir, "schemas_codegen.js"), w.ToString());
 
             // endpoints
             w = CodeWriter.From(new IndentedStringBuilder());
             w.Section("Endpoint Documentation (auto-generated, DO NOT EDIT)").Line();
             foreach (var ep in ir.Endpoints) EmitEndpointDocs(ep, w, _n);
-            File.WriteAllText(Path.Combine(dir, "function_doc.js"), w.ToString());
+            File.WriteAllText(Path.Combine(dir, "function_codegen.js"), w.ToString());
 
         }
 
@@ -42,8 +42,8 @@ namespace GMSwaggerCodeGen.Emitters.Docs
 
             w.JsDoc(b =>
             {
-                b.Line($"@struct {structName}");
-                if (!string.IsNullOrEmpty(s.Description)) b.Summary(s.Description);
+                b.Line($"@struct_partial {structName}");
+                if (!string.IsNullOrEmpty(s.Description)) b.Description(s.Description);
                 foreach (var f in fields)
                 {
                     var desc = f.Description;
@@ -83,8 +83,8 @@ namespace GMSwaggerCodeGen.Emitters.Docs
 
             w.JsDoc(js =>
             {
-                js.Line($"@func {fnName}");
-                if (!string.IsNullOrEmpty(ep.Description)) js.Summary(ep.Description);
+                js.Line($"@func_partial {fnName}");
+                if (!string.IsNullOrEmpty(ep.Description)) js.Description(ep.Description);
                 foreach (var p in ordered)
                 {
                     var desc = p.Description;

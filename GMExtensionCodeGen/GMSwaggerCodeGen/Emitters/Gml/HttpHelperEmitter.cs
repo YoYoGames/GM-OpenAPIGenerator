@@ -44,7 +44,7 @@ namespace GMSwaggerCodeGen.Emitters.Gml
             w.JsDoc(b =>
             {
                 b.Tag("func", $"{n.Priv}get_singleton")
-                .Summary($"Returns the {n.StructPrefix} core singleton (the single instance of 'obj{n.Priv}core').")
+                .Description($"Returns the {n.StructPrefix} core singleton (the single instance of 'obj{n.Priv}core').")
                 .Param(new ParamDoc("_where", "String", "Usually the '_GMFUNCTION_' macro – used only for clearer error messages."))
                 .Tag("ignore");
             })
@@ -64,7 +64,7 @@ namespace GMSwaggerCodeGen.Emitters.Gml
             w.JsDoc(b =>
             {
                 b.Tag("func", $"{n.Priv}request_auth_set_token")
-                .Summary($$"""
+                .Description($$"""
                     Stores or updates an authentication token under the given ID.
                     This is typically used when acquiring tokens from login endpoints,
                     OAuth flows, or any credential-granting operation.
@@ -85,7 +85,7 @@ namespace GMSwaggerCodeGen.Emitters.Gml
             w.JsDoc(b =>
             {
                 b.Tag("func", $"{n.Priv}request_auth_get_token")
-                .Summary($$"""
+                .Description($$"""
                     Retrieves a previously stored token by ID.
                     If the ID does not exist in the token map, 'undefined' is returned.
                     This is typically used by the internal request system when applying
@@ -105,7 +105,7 @@ namespace GMSwaggerCodeGen.Emitters.Gml
             w.JsDoc(b =>
             {
                 b.Tag("func", $"{n.Priv}request_body_set_converter")
-                .Summary($$"""
+                .Description($$"""
                     Convert a body struct/value to the wire format that matches the content-type header. Falls back to passthrough.
                     Registers (or replaces) a converter function for the given 'Content-Type'.
                     """)
@@ -122,7 +122,7 @@ namespace GMSwaggerCodeGen.Emitters.Gml
             w.JsDoc(b =>
             {
                 b.Tag("func", $"{n.Priv}request_body_get_converter")
-                .Summary($$"""
+                .Description($$"""
                     Retrieves the converter assigned to the specified 'Content-Type'.
                     Useful for testing or chaining to the existing implementation.
                     """)
@@ -140,7 +140,7 @@ namespace GMSwaggerCodeGen.Emitters.Gml
             w.JsDoc(b =>
             {
                 b.Tag("func", $"{n.Priv}request_response_set_hook")
-                .Summary("Sets a default request reponse hook for a given http status.")
+                .Description("Sets a default request reponse hook for a given http status.")
                 .Param(new ParamDoc("_code", "Real", "The http response status to attach the hook too."))
                 .Param(new ParamDoc("_hook", "Function", "The interseption function that will be executed."));
             })
@@ -154,7 +154,7 @@ namespace GMSwaggerCodeGen.Emitters.Gml
             w.JsDoc(b =>
             {
                 b.Tag("func", $"{n.Priv}request_body_get_hook")
-                .Summary("Gets the default request reponse hook for a given http status.")
+                .Description("Gets the default request reponse hook for a given http status.")
                 .Param(new ParamDoc("_code", "Real", "The http response status to retreive the hook function from."))
                 .Returns("Function", "The hook function previously assigned (or default one).");
             })
@@ -171,7 +171,7 @@ namespace GMSwaggerCodeGen.Emitters.Gml
             // Constructor
             w.JsDoc(b =>
             {
-                b.Summary("A wrapper around an http request index that allows retries.")
+                b.Description("A wrapper around an http request index that allows retries.")
                 .Param(new ParamDoc("_url", "String", "Url used in the request (without the parameters)"))
                 .Param(new ParamDoc("_params", "Struct", "Url params that will be sent with the request."))
                 .Param(new ParamDoc("_method", "String", "Method that will be used by the request."))
@@ -370,7 +370,7 @@ namespace GMSwaggerCodeGen.Emitters.Gml
                 {
                     builder
                     .Line("@func _apply_auth")
-                    .Summary("Injects credentials for the named security scheme.")
+                    .Description("Injects credentials for the named security scheme.")
                     .Param(new ParamDoc("_header", "Id.DsMap", "Map that will contain the header metadata."))
                     .Param(new ParamDoc("_params", "Struct", "Url params that will be sent with the request."))
                     .Param(new ParamDoc("_scheme", "String", "The name of the secutiry scheme being processed."))

@@ -41,7 +41,7 @@ namespace GMSwaggerCodeGen.Emitters.Gml
             w.JsDoc(js =>
             {
                 js.Line($"@func {fnName}()");
-                if (!string.IsNullOrEmpty(ep.Description)) js.Summary(ep.Description);
+                if (!string.IsNullOrEmpty(ep.Description)) js.Description(ep.Description);
                 foreach (var p in ordered)
                 {
                     var desc = p.Description;

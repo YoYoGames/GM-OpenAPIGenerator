@@ -38,13 +38,14 @@
              return this; 
         }
         /// <summary>Shorthand for the first summary line.</summary>
-        public JsDocBuilder Summary(string text) => Line(text);
+        public JsDocBuilder Description(string text) => Line($"@desc {text}");
         /// <summary>Adds a <c>@param</c> tag.</summary>
         public JsDocBuilder Param(ParamDoc p)
         {
             var typePart = p.Type is null ? string.Empty : $"{{{p.Type}}} ";
+            var namePart = p.Optional ? $"[{p.Name}]" : p.Name;
             var descPart = p.Description ?? string.Empty;
-            Line($"@param {typePart}{p.Name} {descPart}".TrimEnd());
+            Line($"@param {typePart}{namePart} {descPart}".TrimEnd());
             _params.Add(p);
             return this;
         }

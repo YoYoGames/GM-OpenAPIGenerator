@@ -22,7 +22,7 @@ namespace GMSwaggerCodeGen.Emitters.Gml
             w.JsDoc(b =>
             {
                 b.Line($"@func {structName}()");
-                if (!string.IsNullOrEmpty(s.Description)) b.Summary(s.Description);
+                if (!string.IsNullOrEmpty(s.Description)) b.Description(s.Description);
                 foreach (var f in fields)
                 {
                     var desc = f.Description;
