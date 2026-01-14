@@ -43,7 +43,7 @@ namespace GMSwaggerCodeGen.Emitters.Docs
             w.JsDoc(b =>
             {
                 b.Line($"@struct_partial {structName}");
-                if (!string.IsNullOrEmpty(s.Description)) b.Description(s.Description);
+                //if (!string.IsNullOrEmpty(s.Description)) b.Description(s.Description);
                 foreach (var f in fields)
                 {
                     var desc = f.Description;
@@ -101,6 +101,12 @@ namespace GMSwaggerCodeGen.Emitters.Docs
                 if (needsBody) js.Param(new ParamDoc("_body", ep.Body!.Schema.JsDoc(n), "The body to be included in the http request.", true));
                 if (ctChoice) js.Param(new ParamDoc("_content_type", "String", "The type of the body (this will be used by the mapper to convert the body argument to the correct type).", true));
                 js.Param(new ParamDoc("_callback", "Function", "The function - with signature (status, data, request) - that will be executed upon request completion.", true));
+                js.Line("");
+                js.Tag("event", "callback");
+                js.Tag("member", $"{{Real}} _status");
+                js.Tag("member", $"{{{ep.ResponseSchema?.JsDoc(n)}|Undefined}} _data");
+                js.Tag("member", $"{{Struct.{n.StructPrefix}Request}} _request");
+                js.Tag("event_end");
                 js.Line($"@func_end");
             });
             w.Function(fnName, sig, fn => { });
