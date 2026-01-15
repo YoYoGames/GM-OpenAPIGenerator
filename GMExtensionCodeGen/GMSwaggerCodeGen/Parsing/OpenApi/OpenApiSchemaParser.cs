@@ -1,5 +1,6 @@
 
 using CodeGenCore.Ir;
+using GMSwaggerCodeGen.Emitters.Gml;
 using GMSwaggerCodeGen.Helpers;
 using GMSwaggerCodeGen.Ir;
 using Microsoft.OpenApi;
@@ -43,15 +44,21 @@ namespace GMSwaggerCodeGen.Parsing.OpenApi
                 }
             }
 
-            return new IrWebCompilation([.. _ctx.Endpoints], [.. _ctx.Structs], [.. _ctx.AuthSchemes]);
+            return new IrWebCompilation([.. _ctx.Endpoints.OrderBy(ep=> ep.Name)], [.. _ctx.Structs], [.. _ctx.AuthSchemes]);
         }
 
         private IrHttpEndpoint ToEndpoint(string path, string verb, OpenApiOperation op)
         {
             var pars = op.Parameters?.Select(ToParam).ToImmutableArray() ?? [];
 
+            var tags = op.Tags?
+                .Select(t => t.Name)
+                .Where(n => !string.IsNullOrWhiteSpace(n))
+                .ToImmutableArray()
+                ?? [];
+
             return new IrHttpEndpoint(
-                Name: NameUtils.EndpointFuncName(op.OperationId ?? $"{verb}_{path}"),
+                Name: GmlEndpointName.Make(tags.Length > 0 ? tags[0] : string.Empty, verb, path),
                 Verb: verb.ToUpperInvariant(),
                 PathTemplate: path,
                 Parameters: pars,
@@ -59,7 +66,7 @@ namespace GMSwaggerCodeGen.Parsing.OpenApi
                 ResponseSchema: PickResponse(op.Responses),
                 Auth: ResolveAuth(op), 
                 op.Summary, 
-                op.Description);
+                op.Description, Tags: tags!);
         }
 
         private IrParam ToParam(IOpenApiParameter p)

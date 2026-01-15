@@ -6,10 +6,10 @@ using CodeGenCore.Writers.Lang.Gml;
 using GMSwaggerCodeGen.Helpers;
 using GMSwaggerCodeGen.Ir;
 using System.Text.RegularExpressions;
-using System.Xml.Linq;
 
 namespace GMSwaggerCodeGen.Emitters.Gml
 {
+
     internal static class EndpointEmitter
     {
         private static readonly Regex PathVar = new(@"\{([^}]+)\}", RegexOptions.Compiled);
