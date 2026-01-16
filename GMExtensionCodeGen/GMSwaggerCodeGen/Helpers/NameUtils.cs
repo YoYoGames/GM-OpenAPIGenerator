@@ -85,9 +85,10 @@ namespace GMSwaggerCodeGen.Helpers
             return ToSnake(noVars);
         }
 
-        public static string EndpointFuncName(string operationId)
+        public static string EndpointFuncName(string operationId, string? group)
         {
-            return ToSnake(operationId);
+            var groupPart = group is null ? string.Empty : $"{ToSnake(group)}_";
+            return $"{groupPart}{ToSnake(operationId)}";
         }
 
         [GeneratedRegex(@"\{[^}]+\}", RegexOptions.Compiled)]

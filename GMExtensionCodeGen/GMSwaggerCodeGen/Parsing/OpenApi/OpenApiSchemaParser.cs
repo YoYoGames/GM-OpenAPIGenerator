@@ -5,6 +5,7 @@ using GMSwaggerCodeGen.Helpers;
 using GMSwaggerCodeGen.Ir;
 using Microsoft.OpenApi;
 using System.Collections.Immutable;
+using System.Text.Json;
 
 namespace GMSwaggerCodeGen.Parsing.OpenApi
 {
@@ -44,7 +45,7 @@ namespace GMSwaggerCodeGen.Parsing.OpenApi
                 }
             }
 
-            return new IrWebCompilation([.. _ctx.Endpoints], [.. _ctx.Structs], [.. _ctx.AuthSchemes]);
+            return new IrWebCompilation([.. _ctx.Endpoints.OrderBy(ep => ep.Name)], [.. _ctx.Structs], [.. _ctx.AuthSchemes]);
         }
 
         private IrHttpEndpoint ToEndpoint(string path, string verb, OpenApiOperation op)
@@ -56,9 +57,10 @@ namespace GMSwaggerCodeGen.Parsing.OpenApi
                 .Where(n => !string.IsNullOrWhiteSpace(n))
                 .ToImmutableArray()
                 ?? [];
+            var operationId = op.OperationId ?? throw new ArgumentNullException($"{path} :: {verb} :: operationId is required.");
 
             return new IrHttpEndpoint(
-                Name: NameUtils.EndpointFuncName(op.OperationId ?? throw new ArgumentNullException($"{path} :: {verb} :: operationId is required.")), // GmlEndpointName.Make(tags.Length > 0 ? tags[0] : string.Empty, verb, path),
+                Name: NameUtils.EndpointFuncName(operationId, tags.Length > 0 ? tags[0] : null),
                 Verb: verb.ToUpperInvariant(),
                 PathTemplate: path,
                 Parameters: pars,
