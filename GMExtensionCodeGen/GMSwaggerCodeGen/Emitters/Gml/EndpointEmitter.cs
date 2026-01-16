@@ -54,9 +54,11 @@ namespace GMSwaggerCodeGen.Emitters.Gml
                     js.Param(new ParamDoc(NameUtils.ParamName(p.Name), p.Type.JsDoc(n), desc));
                 }
 
+                var dataType = ep.ResponseSchema?.JsDoc(n) ?? "Undefined";
+
                 if (needsBody) js.Param(new ParamDoc("_body", ep.Body!.Schema.JsDoc(n), "The body to be included in the http request.", true));
                 if (ctChoice) js.Param(new ParamDoc("_content_type", "String", "The type of the body (this will be used by the mapper to convert the body argument to the correct type).", true));
-                js.Param(new ParamDoc("_callback", "Function", "The function - with signature (status, data, request) - that will be executed upon request completion.", true));
+                js.Param(new ParamDoc("_callback", "Function", $"The function - with signature (status: real, data: {dataType}, request: Struct.{n.StructPrefix}Request) - that will be executed upon request completion.", true));
             });
 
             /* function */

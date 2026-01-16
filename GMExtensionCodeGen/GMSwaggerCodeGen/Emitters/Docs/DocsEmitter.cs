@@ -64,7 +64,7 @@ namespace GMSwaggerCodeGen.Emitters.Docs
             w.Line();
         }
 
-        private static void EmitEndpointDocs(IrHttpEndpoint ep, ICodeWriter w, GmlNaming n)
+        private void EmitEndpointDocs(IrHttpEndpoint ep, ICodeWriter w, GmlNaming n)
         {
             var ordered = ep.Parameters.OrderByDescending(p => p.Required).ToList();
             var sig = ordered.Select(p => p.Required
@@ -98,13 +98,16 @@ namespace GMSwaggerCodeGen.Emitters.Docs
                     js.Param(new ParamDoc(paramName, p.Type.JsDoc(n), desc));
                 }
 
+                var dataType = ep.ResponseSchema?.JsDoc(n) ?? "type.undefined";
                 if (needsBody) js.Param(new ParamDoc("_body", ep.Body!.Schema.JsDoc(n), "The body to be included in the http request.", true));
                 if (ctChoice) js.Param(new ParamDoc("_content_type", "String", "The type of the body (this will be used by the mapper to convert the body argument to the correct type).", true));
-                js.Param(new ParamDoc("_callback", "Function", "The function - with signature (status, data, request) - that will be executed upon request completion.", true));
+                js.Param(new ParamDoc("_callback", "Function", $"The function - with signature (status: ${{type.real}}, data: ${{{dataType}}}, request: ${{Struct.{_n.StructPrefix}Request}}) - that will be executed upon request completion.", true));
                 js.Line("");
                 js.Tag("event", "callback");
                 js.Tag("member", $"{{Real}} _status");
-                js.Tag("member", $"{{{ep.ResponseSchema?.JsDoc(n)}|Undefined}} _data");
+
+                var callbackDataType = ep.ResponseSchema?.JsDoc(n) ?? "Undefined";
+                js.Tag("member", $"{{{callbackDataType}}} _data");
                 js.Tag("member", $"{{Struct.{n.StructPrefix}Request}} _request");
                 js.Tag("event_end");
                 js.Line($"@func_end");
