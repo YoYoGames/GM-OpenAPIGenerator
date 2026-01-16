@@ -44,7 +44,7 @@ namespace GMSwaggerCodeGen.Parsing.OpenApi
                 }
             }
 
-            return new IrWebCompilation([.. _ctx.Endpoints.OrderBy(ep=> ep.Name)], [.. _ctx.Structs], [.. _ctx.AuthSchemes]);
+            return new IrWebCompilation([.. _ctx.Endpoints], [.. _ctx.Structs], [.. _ctx.AuthSchemes]);
         }
 
         private IrHttpEndpoint ToEndpoint(string path, string verb, OpenApiOperation op)
@@ -58,14 +58,14 @@ namespace GMSwaggerCodeGen.Parsing.OpenApi
                 ?? [];
 
             return new IrHttpEndpoint(
-                Name: GmlEndpointName.Make(tags.Length > 0 ? tags[0] : string.Empty, verb, path),
+                Name: NameUtils.EndpointFuncName(op.OperationId ?? throw new ArgumentNullException($"{path} :: {verb} :: operationId is required.")), // GmlEndpointName.Make(tags.Length > 0 ? tags[0] : string.Empty, verb, path),
                 Verb: verb.ToUpperInvariant(),
                 PathTemplate: path,
                 Parameters: pars,
                 Body: op.RequestBody is null ? null : PickBody(op.RequestBody),
                 ResponseSchema: PickResponse(op.Responses),
-                Auth: ResolveAuth(op), 
-                op.Summary, 
+                Auth: ResolveAuth(op),
+                op.Summary,
                 op.Description, Tags: tags!);
         }
 
