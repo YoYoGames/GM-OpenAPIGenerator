@@ -11,7 +11,7 @@ namespace GMSwaggerCodeGen.Ir
         IrRequestBody? Body,          // optional body spec
         IrType? ResponseSchema,
         ImmutableArray<IrAuthRequirement> Auth,
-        string? Summary = null,   // operation.summary
-        string? Description = null,
-        ImmutableArray<string>? Tags = null);  // operation.description
+        string? Summary,   // operation.summary
+        string? Description,
+        ImmutableArray<string> Tags);  // operation.description
 }

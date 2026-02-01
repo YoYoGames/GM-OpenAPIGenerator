@@ -66,9 +66,10 @@ namespace GMSwaggerCodeGen.Parsing.OpenApi
                 Parameters: pars,
                 Body: op.RequestBody is null ? null : PickBody(op.RequestBody),
                 ResponseSchema: PickResponse(op.Responses),
-                Auth: ResolveAuth(op),
-                op.Summary,
-                op.Description, Tags: tags!);
+                Auth: ResolveAuth(op), 
+                op.Summary, 
+                op.Description, 
+                Tags: tags!);
         }
 
         private IrParam ToParam(IOpenApiParameter p)
