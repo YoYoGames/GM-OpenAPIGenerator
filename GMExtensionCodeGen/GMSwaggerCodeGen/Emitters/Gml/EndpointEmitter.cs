@@ -101,6 +101,15 @@ namespace GMSwaggerCodeGen.Emitters.Gml
                     fn.Assign(paramId, "{ " + string.Join(", ", qs.Select(p => $"{p.Name} : {NameUtils.ParamName(p.Name)}")) + " }", VariableScope.Local).Line();
                 }
 
+                /* cookie params */
+                var cs = ep.Parameters.Where(p => p.Location == IrLocation.Cookie).ToList();
+                var cookieId = cs.Count == 0 ? "undefined" : "_cookies";
+                if (cs.Count > 0)
+                {
+                    fn.Comment("create cookie params struct (injected into Cookie header alongside the jar)");
+                    fn.Assign(cookieId, "{ " + string.Join(", ", cs.Select(p => $"{p.Name} : {NameUtils.ParamName(p.Name)}")) + " }", VariableScope.Local).Line();
+                }
+
                 /* security */
 
                 // Rules:
@@ -127,7 +136,7 @@ namespace GMSwaggerCodeGen.Emitters.Gml
 
                 fn.Return(r => r.Call($"{n.Priv}create_request", [internalUrlField, paramId, $"\"{ep.Verb}\"",
                       needsBody ? "_body" : "undefined",
-                      ctId, secId, "_callback", "_GMFUNCTION_"]));
+                      ctId, secId, cookieId, "_callback", "_GMFUNCTION_"]));
             })
             .Line();
         }

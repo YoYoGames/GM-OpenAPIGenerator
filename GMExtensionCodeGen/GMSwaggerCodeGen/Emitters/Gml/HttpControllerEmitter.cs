@@ -68,6 +68,15 @@ namespace GMSwaggerCodeGen.Emitters.Gml
                 }
                 catch(_ex) { /* ignore it */ };
 
+                // Auto-capture Set-Cookie headers into the cookie jar before hooks/callbacks fire
+                var _response_headers = async_load[? "response_headers"];
+                if (ds_exists(_response_headers, ds_type_map)) {
+                	var _set_cookie = _response_headers[? "Set-Cookie"];
+                	if (!is_undefined(_set_cookie)) {
+                		{{n.Priv}}cookie_capture(_set_cookie);
+                	}
+                }
+
                 // Make sure we check for respose hooks for the given http code
                 var _hook = response_hooks[? _code];
                 if (is_callable(_hook) && _hook(_code, _data, _request) == true) {
@@ -117,6 +126,9 @@ namespace GMSwaggerCodeGen.Emitters.Gml
 
                 // Where all auth-tokens are stored
                 auth_tokens = {};
+
+                // Shared cookie jar — auto-populated from Set-Cookie response headers
+                cookie_jar = {};
 
                 // Store in-progress requests and also registered response hooks.
                 // These serve as lookup tables (ds_map are used due to the nature of the indices)

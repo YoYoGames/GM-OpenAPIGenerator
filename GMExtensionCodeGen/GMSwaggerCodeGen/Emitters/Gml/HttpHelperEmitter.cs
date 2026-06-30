@@ -178,10 +178,11 @@ namespace GMSwaggerCodeGen.Emitters.Gml
                 .Param(new ParamDoc("_body", "Any", "The body of the request can be of any type."))
                 .Param(new ParamDoc("_content_type", "String", "The content type used for formatting the body."))
                 .Param(new ParamDoc("_security", "Array", "An array with all the security schemes that should be injected into the request."))
+                .Param(new ParamDoc("_cookies", "Struct", "Per-request explicit cookie params (merged with the cookie jar on send)."))
                 .Param(new ParamDoc("_callback", "Function", "The callback function to be executed once the request finishes."))
                 .Param(new ParamDoc("_where", "String", "The callee of this function (used for debugging purposes)."));
             })
-            .Struct($"{n.StructPrefix}Request", ["_url", "_params", "_method", "_body", "_content_type", "_security", "_callback", "_where"], body =>
+            .Struct($"{n.StructPrefix}Request", ["_url", "_params", "_method", "_body", "_content_type", "_security", "_cookies", "_callback", "_where"], body =>
             {
                 // Private variables
                 body.Lines("""
@@ -198,6 +199,7 @@ namespace GMSwaggerCodeGen.Emitters.Gml
                     	body: undefined,
                     	callback: _callback,
                     	security: _security,
+                    	cookies: _cookies,
                     	where: _where,
                     }
                     """)
@@ -234,8 +236,8 @@ namespace GMSwaggerCodeGen.Emitters.Gml
                         {
                             // make sure we have a struct cus we might need it for auth
                             var _params = params ?? {};
-                    
-                            // reconstruct header we might need it for auth	
+
+                            // reconstruct header we might need it for auth
                     		var _header = ds_map_create();
 
                             // inject security tokens lazily
@@ -244,13 +246,37 @@ namespace GMSwaggerCodeGen.Emitters.Gml
                                 _self._apply_auth(_header, _params, security[_i], where);
                     		}
 
+                            // get singleton early — needed for both cookie injection and request registration
+                            var _instance = {{n.Priv}}get_singleton(where);
+
+                            // inject cookies: jar entries first, then per-request explicit cookies
+                            var _cookie_parts = [];
+                            var _j = 0;
+                            var _jar_keys = struct_get_names(_instance.cookie_jar);
+                            var _jar_count = array_length(_jar_keys);
+                            for (var _i = 0; _i < _jar_count; _i++) {
+                                var _k = _jar_keys[_i];
+                                _cookie_parts[_j++] = $"{_k}={_instance.cookie_jar[$ _k]}";
+                            }
+                            if (!is_undefined(cookies)) {
+                                var _explicit_keys = struct_get_names(cookies);
+                                var _explicit_count = array_length(_explicit_keys);
+                                for (var _i = 0; _i < _explicit_count; _i++) {
+                                    var _k = _explicit_keys[_i];
+                                    _cookie_parts[_j++] = $"{_k}={cookies[$ _k]}";
+                                }
+                            }
+                            if (_j > 0) {
+                                _header[? "Cookie"] = string_join_ext("; ", _cookie_parts, 0, _j);
+                            }
+
                             // build final url from cached params
                             var _url = _self._build_url(url, _params);
 
                             if (!is_undefined(body))
                             {
                     	        _header[? "Content-Type"] = content_type;
-                    	        switch (body_type) 
+                    	        switch (body_type)
                     	        {
                     		        case 0: // string
                     			        var _string_body = body;
@@ -263,22 +289,21 @@ namespace GMSwaggerCodeGen.Emitters.Gml
                     			        break;
                     	        }
                             }
-                            else 
+                            else
                             {
                     	        // Bodyless route (just use empty string)
                     	        _id = http_request(_url, http_method, _header, "");
                             }
 
-                            var _instance = {{n.Priv}}get_singleton(where);
                     		_instance.requests[? _id] = _self;
-                    
+
                             // free header
                             ds_map_destroy(_header);
                     	}
                     	attempts++;
                     	return _id;
                     }
-                    
+
                     /**
                      * @func retry
                      * Alias to 'send' which will trigger the actual HTTP request.
@@ -460,15 +485,89 @@ namespace GMSwaggerCodeGen.Emitters.Gml
                  * @param {Any} _body The body of the request can be either a string or a buffer.
                  * @param {String|Undefined} _content_type The content type used for formatting the body.
                  * @param {Array} _security An array with all the security schemes that should be injected into the request.
+                 * @param {Struct|Undefined} _cookies Per-request explicit cookie params (merged with the cookie jar on send).
                  * @param {Function} _callback The callback function to be executed once the request finishes.
                  * @param {String} _where The callee of this function (used for debugging purposes).
                  * @returns {Real}
                  * @ignore
                  */
-                function {{n.Priv}}create_request(_url, _params, _method, _body, _content_type, _security, _callback, _where)
+                function {{n.Priv}}create_request(_url, _params, _method, _body, _content_type, _security, _cookies, _callback, _where)
                 {
-                	var _request = new {{n.StructPrefix}}Request(_url, _params, _method, _body, _content_type, _security, _callback, _where);
+                	var _request = new {{n.StructPrefix}}Request(_url, _params, _method, _body, _content_type, _security, _cookies, _callback, _where);
                 	return _request.send();
+                }
+                """);
+
+            // Cookie public API
+            w.Line();
+            w.Lines($$"""
+                /**
+                 * Manually set a cookie in the shared cookie jar.
+                 * @param {String} _name Cookie name.
+                 * @param {String} _value Cookie value.
+                 */
+                function {{n.Pub}}cookie_set(_name, _value)
+                {
+                	var _instance = {{n.Priv}}get_singleton(_GMFUNCTION_);
+                	_instance.cookie_jar[$ _name] = _value;
+                }
+
+                /**
+                 * Read a cookie from the shared cookie jar.
+                 * @param {String} _name Cookie name.
+                 * @returns {String|Undefined}
+                 */
+                function {{n.Pub}}cookie_get(_name)
+                {
+                	var _instance = {{n.Priv}}get_singleton(_GMFUNCTION_);
+                	return _instance.cookie_jar[$ _name];
+                }
+
+                /**
+                 * Remove a single cookie from the shared cookie jar.
+                 * @param {String} _name Cookie name.
+                 */
+                function {{n.Pub}}cookie_delete(_name)
+                {
+                	var _instance = {{n.Priv}}get_singleton(_GMFUNCTION_);
+                	struct_remove(_instance.cookie_jar, _name);
+                }
+
+                /**
+                 * Clear all cookies from the shared cookie jar.
+                 */
+                function {{n.Pub}}cookie_clear()
+                {
+                	var _instance = {{n.Priv}}get_singleton(_GMFUNCTION_);
+                	_instance.cookie_jar = {};
+                }
+
+                /**
+                 * Parse a comma-joined Set-Cookie header value into the shared cookie jar.
+                 * GMRT joins multiple Set-Cookie headers with "," (RFC 2616 duplicate rule).
+                 * Only captures "name=value" — attributes (Path, Expires, etc.) are ignored.
+                 * @param {String} _set_cookie_header The raw "Set-Cookie" response header value.
+                 * @ignore
+                 */
+                function {{n.Priv}}cookie_capture(_set_cookie_header)
+                {
+                	var _instance = {{n.Priv}}get_singleton(_GMFUNCTION_);
+                	var _parts = string_split(_set_cookie_header, ",");
+                	var _count = array_length(_parts);
+                	for (var _i = 0; _i < _count; _i++) {
+                		// take only "name=value" — everything before the first ";"
+                		var _pair_parts = string_split(_parts[_i], ";");
+                		if (array_length(_pair_parts) == 0) continue;
+                		var _pair = string_trim(_pair_parts[0]);
+                		// skip Expires date continuations and other fragments without "="
+                		var _eq = string_pos("=", _pair);
+                		if (_eq <= 0) continue;
+                		var _name = string_trim(string_copy(_pair, 1, _eq - 1));
+                		var _value = string_copy(_pair, _eq + 1, string_length(_pair) - _eq);
+                		if (string_length(_name) > 0) {
+                			_instance.cookie_jar[$ _name] = _value;
+                		}
+                	}
                 }
                 """);
         }
