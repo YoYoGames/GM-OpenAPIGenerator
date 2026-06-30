@@ -20,12 +20,30 @@ namespace GMSwaggerCodeGen.Emitters.Gml
         private static readonly string internalContentTypeField = "__content_type__";
         private static readonly string internalSecurityField = "__security__";
 
+        // Returns the GML literal for a param default, or "undefined" when not applicable.
+        private static string DefaultLiteral(IrType type, string? raw)
+        {
+            if (string.IsNullOrEmpty(raw)) return "undefined";
+
+            if (type.IsStringScalar)
+                return $"\"{raw}\"";
+
+            if (type.Kind == IrTypeKind.Scalar &&
+                type.Name.Equals("bool", StringComparison.OrdinalIgnoreCase))
+                return raw.Equals("True", StringComparison.OrdinalIgnoreCase) ? "true" : "false";
+
+            if (type.IsNumericScalar)
+                return raw;
+
+            return "undefined";
+        }
+
         public static void Emit(IrHttpEndpoint ep, ICodeWriter w, GmlNaming n)
         {
             var ordered = ep.Parameters.OrderByDescending(p => p.Required).ToList();
             var sig = ordered.Select(p => p.Required
                                     ? NameUtils.ParamName(p.Name)
-                                    : $"{NameUtils.ParamName(p.Name)} = undefined")
+                                    : $"{NameUtils.ParamName(p.Name)} = {DefaultLiteral(p.Type, p.Default)}")
                              .ToList();
 
             bool needsBody = ep.Body is not null;
@@ -101,6 +119,15 @@ namespace GMSwaggerCodeGen.Emitters.Gml
                     fn.Assign(paramId, "{ " + string.Join(", ", qs.Select(p => $"{p.Name} : {NameUtils.ParamName(p.Name)}")) + " }", VariableScope.Local).Line();
                 }
 
+                /* cookie params */
+                var cs = ep.Parameters.Where(p => p.Location == IrLocation.Cookie).ToList();
+                var cookieId = cs.Count == 0 ? "undefined" : "_cookies";
+                if (cs.Count > 0)
+                {
+                    fn.Comment("create cookie params struct (injected into Cookie header alongside the jar)");
+                    fn.Assign(cookieId, "{ " + string.Join(", ", cs.Select(p => $"{p.Name} : {NameUtils.ParamName(p.Name)}")) + " }", VariableScope.Local).Line();
+                }
+
                 /* security */
 
                 // Rules:
@@ -127,7 +154,7 @@ namespace GMSwaggerCodeGen.Emitters.Gml
 
                 fn.Return(r => r.Call($"{n.Priv}create_request", [internalUrlField, paramId, $"\"{ep.Verb}\"",
                       needsBody ? "_body" : "undefined",
-                      ctId, secId, "_callback", "_GMFUNCTION_"]));
+                      ctId, secId, cookieId, "_callback", "_GMFUNCTION_"]));
             })
             .Line();
         }

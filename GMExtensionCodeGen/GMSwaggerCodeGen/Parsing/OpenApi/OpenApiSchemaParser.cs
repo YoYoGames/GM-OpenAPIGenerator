@@ -76,11 +76,16 @@ namespace GMSwaggerCodeGen.Parsing.OpenApi
         {
             var loc = p.In switch
             {
-                ParameterLocation.Path => IrLocation.Path,
-                ParameterLocation.Query => IrLocation.Query,
+                ParameterLocation.Path   => IrLocation.Path,
+                ParameterLocation.Query  => IrLocation.Query,
                 ParameterLocation.Header => IrLocation.Header,
+                ParameterLocation.Cookie => IrLocation.Cookie,
                 _ => throw new NotSupportedException($"Param location {p.In} not supported.")
             };
+
+            if (loc == IrLocation.Cookie)
+                Console.WriteLine($"[CodeGen] cookie param '{p.Name}' will be managed by the cookie jar.");
+
             return new IrParam(p.Name!, ToIrType(p.Schema!), loc, p.Required, p.Schema?.Default?.ToString(), p.Description);
         }
 

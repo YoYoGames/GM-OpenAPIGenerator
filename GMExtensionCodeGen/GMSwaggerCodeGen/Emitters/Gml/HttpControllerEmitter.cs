@@ -68,6 +68,15 @@ namespace GMSwaggerCodeGen.Emitters.Gml
                 }
                 catch(_ex) { /* ignore it */ };
 
+                // Auto-capture Set-Cookie headers into the cookie jar before hooks/callbacks fire
+                var _response_headers = async_load[? "response_headers"];
+                if (ds_exists(_response_headers, ds_type_map)) {
+                	var _set_cookie = _response_headers[? "Set-Cookie"];
+                	if (!is_undefined(_set_cookie)) {
+                		{{n.Priv}}cookie_capture(_set_cookie);
+                	}
+                }
+
                 // Make sure we check for respose hooks for the given http code
                 var _hook = response_hooks[? _code];
                 if (is_callable(_hook) && _hook(_code, _data, _request) == true) {
@@ -114,9 +123,27 @@ namespace GMSwaggerCodeGen.Emitters.Gml
                 };
                 type_converters[$ "application/x-www-form-urlencoded"] = function(_i) { return _i; };
                 type_converters[$ "text/plain"] = function(_i) { return string(_i) };
+                type_converters[$ "multipart/form-data"] = function(_body, _header) {
+                    static _boundary = "------GMCODEGEN_BOUNDARY";
+                    var _parts = [];
+                    var _j = 0;
+                    var _keys = struct_get_names(_body);
+                    var _count = array_length(_keys);
+                    for (var _i = 0; _i < _count; _i++) {
+                        var _key = _keys[_i];
+                        var _val = _body[$ _key];
+                        if (is_undefined(_val)) continue;
+                        _parts[_j++] = $"--{_boundary}\r\nContent-Disposition: form-data; name=\"{_key}\"\r\n\r\n{string(_val)}";
+                    }
+                    _header[? "Content-Type"] = $"multipart/form-data; boundary={_boundary}";
+                    return string_join_ext("\r\n", _parts, 0, _j) + $"\r\n--{_boundary}--";
+                };
 
                 // Where all auth-tokens are stored
                 auth_tokens = {};
+
+                // Shared cookie jar — auto-populated from Set-Cookie response headers
+                cookie_jar = {};
 
                 // Store in-progress requests and also registered response hooks.
                 // These serve as lookup tables (ds_map are used due to the nature of the indices)
