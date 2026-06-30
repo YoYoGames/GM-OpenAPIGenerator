@@ -11,6 +11,12 @@ namespace GMSwaggerCodeGen.Parsing.OpenApi
     /// </summary>
     public static class OpenApiSchemaLoader
     {
+        private static string DetectFormat(string path)
+        {
+            var ext = Path.GetExtension(path).ToLowerInvariant();
+            return ext is ".yaml" or ".yml" ? "yaml" : "json";
+        }
+
         public static IrWebCompilation LoadFromFile(string path)
         {
             var jsonText = File.ReadAllText(path);
@@ -19,7 +25,7 @@ namespace GMSwaggerCodeGen.Parsing.OpenApi
 
             var settings = new OpenApiReaderSettings{};
             var result = OpenApiDocument.Load(ms,
-                format: "json",         // <-- explicitly JSON
+                format: DetectFormat(path),
                 settings: settings);
 
             // 3) Pull out the parsed document
