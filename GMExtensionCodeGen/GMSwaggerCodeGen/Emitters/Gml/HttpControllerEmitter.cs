@@ -123,6 +123,21 @@ namespace GMSwaggerCodeGen.Emitters.Gml
                 };
                 type_converters[$ "application/x-www-form-urlencoded"] = function(_i) { return _i; };
                 type_converters[$ "text/plain"] = function(_i) { return string(_i) };
+                type_converters[$ "multipart/form-data"] = function(_body, _header) {
+                    static _boundary = "------GMCODEGEN_BOUNDARY";
+                    var _parts = [];
+                    var _j = 0;
+                    var _keys = struct_get_names(_body);
+                    var _count = array_length(_keys);
+                    for (var _i = 0; _i < _count; _i++) {
+                        var _key = _keys[_i];
+                        var _val = _body[$ _key];
+                        if (is_undefined(_val)) continue;
+                        _parts[_j++] = $"--{_boundary}\r\nContent-Disposition: form-data; name=\"{_key}\"\r\n\r\n{string(_val)}";
+                    }
+                    _header[? "Content-Type"] = $"multipart/form-data; boundary={_boundary}";
+                    return string_join_ext("\r\n", _parts, 0, _j) + $"\r\n--{_boundary}--";
+                };
 
                 // Where all auth-tokens are stored
                 auth_tokens = {};

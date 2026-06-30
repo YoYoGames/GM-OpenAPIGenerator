@@ -195,8 +195,7 @@ namespace GMSwaggerCodeGen.Emitters.Gml
                     	params: _params,
                     	http_method: _method,
                         content_type: _content_type,
-                    	body_type: 0, // string
-                    	body: undefined,
+                    	raw_body: undefined,
                     	callback: _callback,
                     	security: _security,
                     	cookies: _cookies,
@@ -273,20 +272,20 @@ namespace GMSwaggerCodeGen.Emitters.Gml
                             // build final url from cached params
                             var _url = _self._build_url(url, _params);
 
-                            if (!is_undefined(body))
+                            if (!is_undefined(raw_body))
                             {
+                    	        // set Content-Type before calling the converter so it can override it
+                    	        // (e.g. multipart/form-data appends the boundary)
                     	        _header[? "Content-Type"] = content_type;
-                    	        switch (body_type)
+                    	        var _processed = _self._process_body(raw_body, content_type, _header, where);
+                    	        if (is_string(_processed))
                     	        {
-                    		        case 0: // string
-                    			        var _string_body = body;
-                    			        _id = http_request(_url, http_method, _header, _string_body);
-                    			        break;
-                    		        case 1: // buffer
-                    			        var _buffer_body = buffer_base64_decode(body);
-                    			        _id = http_request(_url, http_method, _header, _buffer_body);
-                    			        buffer_delete(_buffer_body);
-                    			        break;
+                    		        _id = http_request(_url, http_method, _header, _processed);
+                    	        }
+                    	        else
+                    	        {
+                    		        _id = http_request(_url, http_method, _header, _processed);
+                    		        buffer_delete(_processed);
                     	        }
                             }
                             else
@@ -325,15 +324,16 @@ namespace GMSwaggerCodeGen.Emitters.Gml
                      * @returns {String|Id.Buffer}
                      * @ignore
                      */
-                    static _process_body = function(_body, _content_type, _where)
+                    static _process_body = function(_body, _content_type, _header, _where)
                     {
                         var _body_converter = {{n.Priv}}request_body_get_converter(_content_type);
-                        if (!is_callable(_body_converter)) 
+                        if (!is_callable(_body_converter))
                         {
                             show_error($"{_where} :: No converter for '{_content_type}'.", true);
                         }
 
-                        _body = _body_converter(_body); // The result here needs to be either a string or a buffer
+                        // pass _header so converters can modify it (e.g. multipart sets boundary in Content-Type)
+                        _body = _body_converter(_body, _header);
                         if (!is_string(_body) && (!is_handle(_body) || !string_starts_with(string(_body), "ref buffer")))
                         {
                             show_error($"{_where} :: The body process function failed to output either a string or a valid buffer.", true);
@@ -456,19 +456,10 @@ namespace GMSwaggerCodeGen.Emitters.Gml
                 }), VariableScope.Static)
                 .Line();
 
-                body.Lines($$"""
-                    // Handle request body
+                body.Lines("""
+                    // Store raw body — processing is deferred to send() where _header is available
                     if (!is_undefined(_body)) {
-                        _body = _process_body(_body, _content_type, _where);
-                        if (!is_string(_body)) 
-                        {
-                        	__.body_type = 1; // buffer
-                        	__.body = buffer_base64_encode(_body, 0, -1); // we base64 encode the buffer so we can re-use it.
-                        }
-                    	else
-                    	{
-                    		__.body = _body;
-                    	}
+                        __.raw_body = _body;
                     }
                     """);
             })
