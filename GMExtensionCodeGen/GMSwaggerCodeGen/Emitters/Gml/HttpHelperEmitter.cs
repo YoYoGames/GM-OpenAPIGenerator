@@ -383,10 +383,9 @@ namespace GMSwaggerCodeGen.Emitters.Gml
                     		_result[_j++] = is_array(_value) ? params_build_array(_key, _value) : $"{_key}={_value}";
                     	}
                     
-                    	var _str = string_pos("?", _url_base) == 0 ? "?" : "";
-                    	_str += string_join_ext("&", _result, 0, _j);
-                    
-                    	return _url_base + _str;
+                    	if (_j == 0) return _url_base;
+                    	var _sep = string_pos("?", _url_base) == 0 ? "?" : "&";
+                    	return _url_base + _sep + string_join_ext("&", _result, 0, _j);
                     }
                     """)
                 .Line();
