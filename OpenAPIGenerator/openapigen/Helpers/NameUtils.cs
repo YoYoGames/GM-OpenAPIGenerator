@@ -1,7 +1,7 @@
-﻿using System.Text;
+using System.Text;
 using System.Text.RegularExpressions;
 
-namespace GMSwaggerCodeGen.Helpers
+namespace openapigen.Helpers
 {
     public static partial class NameUtils
     {

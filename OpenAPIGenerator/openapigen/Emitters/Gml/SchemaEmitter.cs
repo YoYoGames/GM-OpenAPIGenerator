@@ -1,8 +1,7 @@
-﻿using codegencore.Model;
-using codegencore.Writers;
+using codegencore.Model;
 using codegencore.Writers.JSDoc;
 using codegencore.Writers.Lang;
-using GMSwaggerCodeGen.Helpers;
+using openapigen.Helpers;
 using openapigen.Helpers;
 using openapigen.Model;
 
@@ -10,7 +9,7 @@ namespace openapigen.Emitters.Gml
 {
     internal static class SchemaEmitter
     {
-        public static void EmitAll(IrWebCompilation c, ICodeWriter w, GmlNaming n)
+        public static void EmitAll(IrWebCompilation c, GmlWriter w, GmlNaming n)
         {
             // 1) Constructors (struct only)
             foreach (var s in c.Schemas.OrderBy(x => x.Name))
@@ -29,7 +28,7 @@ namespace openapigen.Emitters.Gml
 
     internal static class SchemaValidatorEmitter
     {
-        public static void Emit(IrSchema s, IrWebCompilation c, ICodeWriter w, GmlNaming n)
+        public static void Emit(IrSchema s, IrWebCompilation c, GmlWriter w, GmlNaming n)
         {
             switch (s)
             {
@@ -137,6 +136,24 @@ namespace openapigen.Emitters.Gml
                 }
             }).Line();
         }
+    }
+
+    internal static class EnumSchemaEmitter
+    {
+        // TODO: emit a validator that checks the value is one of the known literals
+        public static void EmitValidation(IrSchema.Enum en, IrWebCompilation c, GmlWriter w, GmlNaming n) { }
+    }
+
+    internal static class CompositeSchemaEmitter
+    {
+        // TODO: emit validators for oneOf / anyOf / allOf compositions
+        public static void EmitValidation(IrSchema s, IrWebCompilation c, GmlWriter w, GmlNaming n) { }
+    }
+
+    internal static class AliasSchemaEmitter
+    {
+        // TODO: emit a validator that delegates to the aliased schema
+        public static void EmitValidation(IrSchema.Alias al, IrWebCompilation c, GmlWriter w, GmlNaming n) { }
     }
 
     internal static class SchemaJsDoc

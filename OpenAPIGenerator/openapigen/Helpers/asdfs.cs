@@ -1,11 +1,11 @@
-﻿using codegencore.Model;
+using codegencore.Model;
 using codegencore.Writers;
 using codegencore.Writers.Lang;
 using openapigen.Helpers;
 using openapigen.Model;
 using System.Collections.Immutable;
 
-namespace GMSwaggerCodeGen.Helpers
+namespace openapigen.Helpers
 {
     internal static class ValueSchemaValidatorEmitter
     {

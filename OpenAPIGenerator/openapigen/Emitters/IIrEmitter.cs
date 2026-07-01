@@ -1,6 +1,6 @@
-﻿using openapigen.Model;
+using openapigen.Model;
 
-namespace GMSwaggerCodeGen.Emitters
+namespace openapigen.Emitters
 {
     public interface IIrEmitter { void Emit(IrWebCompilation comp, string outputDir); }
 }

@@ -1,474 +1,408 @@
-﻿using codegencore.Writers.JSDoc;
+using codegencore.Writers.JSDoc;
 using codegencore.Writers.Lang;
-using GMSwaggerCodeGen.Helpers;
+using openapigen.Helpers;
 using openapigen.Model;
 
 namespace openapigen.Emitters.Gml
 {
-    internal class HttpHelperEmitter
+    internal static class HttpHelperEmitter
     {
-        public static void Emit(IrWebCompilation ir, GmlWriter w, GmlNaming n) 
+        public static void Emit(IrWebCompilation ir, GmlWriter w, GmlNaming n)
         {
-            EmitOptionsHelper(w, ir, n);
+            EmitOptions(w, n);
             w.Line();
-            EmitUtilsHelper(w, ir, n);
+            EmitUtils(w, ir, n);
             w.Line();
-            EmitRequestHelper(w, ir, n);
-            w.Line();
+            EmitRequest(w, ir, n);
         }
 
-        private static void EmitOptionsHelper(GmlWriter w, IrWebCompilation ir, GmlNaming n)
+        private static void EmitOptions(GmlWriter w, GmlNaming n)
         {
-            w.Lines($$"""           
-                /// @returns {String}
-                function {{n.Priv}}options_get_rest_url() {
-                	static _url = extension_get_option_value("{{n.StructPrefix}}", "server_rest_url");
-                	return _url;
-                }
-                
-                /// @returns {Bool}
-                function {{n.Priv}}options_is_debug() {
-                	static _enabled = bool(extension_get_option_value("{{n.StructPrefix}}", "debug_logging"));
-                	return _enabled;
-                }
-                """);
-            w.Line();
+            w.JsDoc(b => b.Returns("String"))
+             .Function($"{n.Priv}options_get_rest_url", [], fn =>
+             {
+                 fn.Assign("_url", $"extension_get_option_value(\"{n.StructPrefix}\", \"server_rest_url\")", VariableScope.Static)
+                   .Return("_url");
+             }).Line();
+
+            w.JsDoc(b => b.Returns("Bool"))
+             .Function($"{n.Priv}options_is_debug", [], fn =>
+             {
+                 fn.Assign("_enabled", $"bool(extension_get_option_value(\"{n.StructPrefix}\", \"debug_logging\"))", VariableScope.Static)
+                   .Return("_enabled");
+             }).Line();
         }
 
-        private static void EmitUtilsHelper(GmlWriter w, IrWebCompilation ir, GmlNaming n)
+        private static void EmitUtils(GmlWriter w, IrWebCompilation ir, GmlNaming n)
         {
-            var authSchemeLiterals = string.Join(", ", ir.AuthSchemes.Select(s => $"\"{s.Name}\""));
+            var schemeList = string.Join(", ", ir.AuthSchemes.Select(s => $"\"{s.Name}\""));
 
-            w.JsDoc(b =>
-            {
-                b.Tag("func", $"{n.Priv}get_singleton")
-                .Description($"Returns the {n.StructPrefix} core singleton (the single instance of 'obj{n.Priv}core').")
-                .Param(new ParamDoc("_where", "String", "Usually the '_GMFUNCTION_' macro – used only for clearer error messages."))
-                .Tag("ignore");
-            })
-            .Function($"{n.Priv}get_singleton", ["_where"], body =>
-            {
-                body.Comment("Generator function")
-                .Assign("instance", expr => expr.Call("instance_create_depth", ["0", "0", "0", $"obj{n.Priv}core"]), VariableScope.Static)
-                .Keyword("with", "instance", withBody =>
-                {
-                    withBody.Return("self");
-                })
-                .Call("show_error", [$$"""$"{_where} :: Failed to get the {obj{{n.Priv}}core} singleton instance." """, "true"]).Line(";");
-            })
-            .Line();
+            w.JsDoc(b => b
+                .Param(new ParamDoc("_where", "String", "Caller location for error messages."))
+                .Returns("Id.Instance")
+                .Tag("ignore"))
+             .Function($"{n.Priv}get_singleton", ["_where"], fn =>
+             {
+                 fn.Assign("instance", $"instance_create_depth(0, 0, 0, obj{n.Priv}core)", VariableScope.Static);
+                 fn.With("instance", inner => inner.Return("self"));
+                 fn.Line($"show_error($\"{{_where}} :: Failed to get the obj{n.Priv}core singleton.\", true);");
+             }).Line();
 
-            // Auth Tokens
-            w.JsDoc(b =>
-            {
-                b.Tag("func", $"{n.Priv}request_auth_set_token")
-                .Description($$"""
-                    Stores or updates an authentication token under the given ID.
-                    This is typically used when acquiring tokens from login endpoints,
-                    OAuth flows, or any credential-granting operation.
-                    The token is stored inside the 'auth_token' map of
-                    'obj{{n.Priv}}core', which is accessed via the singleton.
-                    """)
-                .Param(new ParamDoc("_token_id", "String", $"One of the following ids: {authSchemeLiterals}."))
-                .Param(new ParamDoc("_token", "String", "The actual token string (e.g. JWT, API key, etc.)"))
-                .Returns("Undefined");
-            })
-            .Function($"{n.Priv}request_auth_set_token", ["_token_id", "_token"], body =>
-            {
-                body.Assign("_instance", expr => expr.Call($"{n.Priv}get_singleton", "_GMFUNCTION_"), VariableScope.Local)
-                .Assign(lhs: lhs => lhs.Access("_instance.auth_tokens", AccessorKind.Struct, "_token_id"), value: "_token", VariableScope.None);
-            })
-            .Line();
+            w.JsDoc(b => b
+                .Param(new ParamDoc("_token_id", "String", $"One of: {schemeList}"))
+                .Param(new ParamDoc("_token", "String", null)))
+             .Function($"{n.Priv}request_auth_set_token", ["_token_id", "_token"], fn =>
+             {
+                 fn.Assign("_instance", $"{n.Priv}get_singleton(_GMFUNCTION_)", VariableScope.Local)
+                   .Assign(w => w.Access("_instance.auth_tokens", AccessorKind.Struct, "_token_id"), "_token");
+             }).Line();
 
-            w.JsDoc(b =>
-            {
-                b.Tag("func", $"{n.Priv}request_auth_get_token")
-                .Description($$"""
-                    Retrieves a previously stored token by ID.
-                    If the ID does not exist in the token map, 'undefined' is returned.
-                    This is typically used by the internal request system when applying
-                    security credentials to headers, query parameters, or request bodies.
-                    """)
-                .Param(new ParamDoc("_token_id", "String", $"One of the following ids: {authSchemeLiterals}."))
-                .Returns("String", "The token string, or undefined if not found.");
-            })
-            .Function($"{n.Priv}request_auth_get_token", ["_token_id"], body =>
-            {
-                body.Assign("_instance", expr => expr.Call($"{n.Priv}get_singleton", "_GMFUNCTION_"), VariableScope.Local)
-                .Return(expr => expr.Access("_instance.auth_tokens", AccessorKind.Struct, "_token_id"));
-            })
-            .Line();
+            w.JsDoc(b => b
+                .Param(new ParamDoc("_token_id", "String", $"One of: {schemeList}"))
+                .Returns("String"))
+             .Function($"{n.Priv}request_auth_get_token", ["_token_id"], fn =>
+             {
+                 fn.Assign("_instance", $"{n.Priv}get_singleton(_GMFUNCTION_)", VariableScope.Local)
+                   .Return(r => r.Access("_instance.auth_tokens", AccessorKind.Struct, "_token_id"));
+             }).Line();
 
-            // Body Converters
-            w.JsDoc(b =>
-            {
-                b.Tag("func", $"{n.Priv}request_body_set_converter")
-                .Description($$"""
-                    Convert a body struct/value to the wire format that matches the content-type header. Falls back to passthrough.
-                    Registers (or replaces) a converter function for the given 'Content-Type'.
-                    """)
-                .Param(new ParamDoc("_content_type", "String", "Content type value to match (case-sensitive)"))
-                .Param(new ParamDoc("_function", "Function", "A function that takes '(value, where)' and returns a string|buffer|any."));
-            })
-            .Function($"{n.Priv}request_body_set_converter", ["_content_type", "_function"], body =>
-            {
-                body.Assign("_instance", expr => expr.Call($"{n.Priv}get_singleton", "_GMFUNCTION_"), VariableScope.Local)
-                .Assign(lhs: lhs => lhs.Access("_instance.type_converters", AccessorKind.Struct, "_content_type"), "_function");
-            })
-            .Line();
+            w.JsDoc(b => b
+                .Param(new ParamDoc("_content_type", "String", null))
+                .Param(new ParamDoc("_function", "Function", "function(_body, _header_ds_map) → String|Id.Buffer")))
+             .Function($"{n.Priv}request_body_set_converter", ["_content_type", "_function"], fn =>
+             {
+                 fn.Assign("_instance", $"{n.Priv}get_singleton(_GMFUNCTION_)", VariableScope.Local)
+                   .Assign(w => w.Access("_instance.type_converters", AccessorKind.Struct, "_content_type"), "_function");
+             }).Line();
 
-            w.JsDoc(b =>
-            {
-                b.Tag("func", $"{n.Priv}request_body_get_converter")
-                .Description($$"""
-                    Retrieves the converter assigned to the specified 'Content-Type'.
-                    Useful for testing or chaining to the existing implementation.
-                    """)
-                .Param(new ParamDoc("_content_type", "String", "Content type value to match (case-sensitive)"))
-                .Returns("Function", "The converter function previously assigned (or default one).");
-            })
-            .Function($"{n.Priv}request_body_get_converter", ["_content_type"], body =>
-            {
-                body.Assign("_instance", expr => expr.Call($"{n.Priv}get_singleton", "_GMFUNCTION_"), VariableScope.Local)
-                .Return(expr => expr.Access("_instance.type_converters", AccessorKind.Struct, "_content_type"));
-            })
-            .Line();
+            w.JsDoc(b => b
+                .Param(new ParamDoc("_content_type", "String", null))
+                .Returns("Function"))
+             .Function($"{n.Priv}request_body_get_converter", ["_content_type"], fn =>
+             {
+                 fn.Assign("_instance", $"{n.Priv}get_singleton(_GMFUNCTION_)", VariableScope.Local)
+                   .Return(r => r.Access("_instance.type_converters", AccessorKind.Struct, "_content_type"));
+             }).Line();
 
-            // Response Hooks
-            w.JsDoc(b =>
-            {
-                b.Tag("func", $"{n.Priv}request_response_set_hook")
-                .Description("Sets a default request reponse hook for a given http status.")
-                .Param(new ParamDoc("_code", "Real", "The http response status to attach the hook too."))
-                .Param(new ParamDoc("_hook", "Function", "The interseption function that will be executed."));
-            })
-            .Function($"{n.Priv}request_response_set_hook", ["_code", "_hook"], body =>
-            {
-                body.Assign("_instance", expr => expr.Call($"{n.Priv}get_singleton", "_GMFUNCTION_"), VariableScope.Local)
-                .Assign(lhs: lhs => lhs.Access("_instance.response_hooks", AccessorKind.Map, "_code"), "_hook");
-            })
-            .Line();
+            w.JsDoc(b => b
+                .Param(new ParamDoc("_code", "Real", null))
+                .Param(new ParamDoc("_hook", "Function", null)))
+             .Function($"{n.Priv}request_response_set_hook", ["_code", "_hook"], fn =>
+             {
+                 fn.Assign("_instance", $"{n.Priv}get_singleton(_GMFUNCTION_)", VariableScope.Local)
+                   .Assign(w => w.Access("_instance.response_hooks", AccessorKind.Map, "_code"), "_hook");
+             }).Line();
 
-            w.JsDoc(b =>
-            {
-                b.Tag("func", $"{n.Priv}request_body_get_hook")
-                .Description("Gets the default request reponse hook for a given http status.")
-                .Param(new ParamDoc("_code", "Real", "The http response status to retreive the hook function from."))
-                .Returns("Function", "The hook function previously assigned (or default one).");
-            })
-            .Function($"{n.Priv}request_body_get_hook", ["_code"], body =>
-            {
-                body.Assign("_instance", expr => expr.Call($"{n.Priv}get_singleton", "_GMFUNCTION_"), VariableScope.Local)
-                .Return(expr => expr.Access("_instance.response_hooks", AccessorKind.Map, "_code"));
-            })
-            .Line();
+            w.JsDoc(b => b
+                .Param(new ParamDoc("_code", "Real", null))
+                .Returns("Function"))
+             .Function($"{n.Priv}request_response_get_hook", ["_code"], fn =>
+             {
+                 fn.Assign("_instance", $"{n.Priv}get_singleton(_GMFUNCTION_)", VariableScope.Local)
+                   .Return(r => r.Access("_instance.response_hooks", AccessorKind.Map, "_code"));
+             }).Line();
         }
 
-        private static void EmitRequestHelper(GmlWriter w, IrWebCompilation ir, GmlNaming n)
+        private static void EmitRequest(GmlWriter w, IrWebCompilation ir, GmlNaming n)
         {
-            // Constructor
-            w.JsDoc(b =>
-            {
-                b.Description("A wrapper around an http request index that allows retries.")
-                .Param(new ParamDoc("_url", "String", "Url used in the request (without the parameters)"))
-                .Param(new ParamDoc("_params", "Struct", "Url params that will be sent with the request."))
-                .Param(new ParamDoc("_method", "String", "Method that will be used by the request."))
-                .Param(new ParamDoc("_body", "Any", "The body of the request can be of any type."))
-                .Param(new ParamDoc("_content_type", "String", "The content type used for formatting the body."))
-                .Param(new ParamDoc("_security", "Array", "An array with all the security schemes that should be injected into the request."))
-                .Param(new ParamDoc("_callback", "Function", "The callback function to be executed once the request finishes."))
-                .Param(new ParamDoc("_where", "String", "The callee of this function (used for debugging purposes)."));
-            })
-            .Struct($"{n.StructPrefix}Request", ["_url", "_params", "_method", "_body", "_content_type", "_security", "_callback", "_where"], body =>
-            {
-                // Private variables
-                body.Lines("""
-                    /**
-                     * create private scope
-                     * @ignore
-                     */
-                    __ = {
-                    	url: _url,
-                    	params: _params,
-                    	http_method: _method,
-                        content_type: _content_type,
-                    	body_type: 0, // string
-                    	body: undefined,
-                    	callback: _callback,
-                    	security: _security,
-                    	where: _where,
-                    }
-                    """)
-                .Line();
-
-                // Public variables
-                body.Lines("""
-                    attempts = 0;
-                    """)
-                .Line();
-
-                // Public functions
-                body.Lines($$"""
-                    /**
-                     * @func get_callback
-                     * Returns the callback attatched to this request.
-                     * @returns {Function}
-                     */
-                    static get_callback = function()
-                    {
-                    	return __.callback;
-                    }
-
-                    /**
-                     * @func send
-                     * Triggers the actual HTTP request.
-                     * @returns {Real}
-                     */
-                    static send = function()
-                    {
-                    	var _id = -1;
-                        var _self = self;
-                    	with (__)
-                        {
-                            // make sure we have a struct cus we might need it for auth
-                            var _params = params ?? {};
-                    
-                            // reconstruct header we might need it for auth	
-                    		var _header = ds_map_create();
-
-                            // inject security tokens lazily
-                            var _count = array_length(security);
-                            for (var _i = 0; _i < _count; _i++) {
-                                _self._apply_auth(_header, _params, security[_i], where);
-                    		}
-
-                            // build final url from cached params
-                            var _url = _self._build_url(url, _params);
-
-                            if (!is_undefined(body))
-                            {
-                    	        _header[? "Content-Type"] = content_type;
-                    	        switch (body_type) 
-                    	        {
-                    		        case 0: // string
-                    			        var _string_body = body;
-                    			        _id = http_request(_url, http_method, _header, _string_body);
-                    			        break;
-                    		        case 1: // buffer
-                    			        var _buffer_body = buffer_base64_decode(body);
-                    			        _id = http_request(_url, http_method, _header, _buffer_body);
-                    			        buffer_delete(_buffer_body);
-                    			        break;
-                    	        }
-                            }
-                            else 
-                            {
-                    	        // Bodyless route (just use empty string)
-                    	        _id = http_request(_url, http_method, _header, "");
-                            }
-
-                            var _instance = {{n.Priv}}get_singleton(where);
-                    		_instance.requests[? _id] = _self;
-                    
-                            // free header
-                            ds_map_destroy(_header);
-                    	}
-                    	attempts++;
-                    	return _id;
-                    }
-                    
-                    /**
-                     * @func retry
-                     * Alias to 'send' which will trigger the actual HTTP request.
-                     * @returns {Real}
-                     */
-                    static retry = function() { return send(); }
-                    """)
-                .Line();
-
-                // Pivate functions
-                body.Lines($$"""
-
-                    /**
-                     * @func _process_body
-                     * Processes the body of the http request.
-                     * @param {Any} _body The body of the request can be of any type.
-                     * @param {String} _content_type The content type used for formatting the body.
-                     * @param {String} _where The callee of this function (used for debugging purposes).
-                     * @returns {String|Id.Buffer}
-                     * @ignore
-                     */
-                    static _process_body = function(_body, _content_type, _where)
-                    {
-                        var _body_converter = {{n.Priv}}request_body_get_converter(_content_type);
-                        if (!is_callable(_body_converter)) 
-                        {
-                            show_error($"{_where} :: No converter for '{_content_type}'.", true);
-                        }
-
-                        _body = _body_converter(_body); // The result here needs to be either a string or a buffer
-                        if (!is_string(_body) && (!is_handle(_body) || !string_starts_with(string(_body), "ref buffer")))
-                        {
-                            show_error($"{_where} :: The body process function failed to output either a string or a valid buffer.", true);
-                        }
-
-                        // feather ignore once GM1045
-                        return _body;
-                    }
-
-
-                    /**
-                     * @func _build_url
-                     * Builds the full url from the base url and the cached params.
-                     * @param {String} _url_base
-                     * @param {Struct} _params
-                     * @returns {String}
-                     * @ignore
-                     */
-                    static _build_url = function(_url_base, _params = undefined)
-                    {
-                        // cache an internal array for storing params (this should reduce memory allocations)
-                        static _result = [];
-                    
-                        // build params entry for array value
-                        static params_build_array = function(_key, _array)
-                        {
-                    	    var _length = array_length(_array);
-                    	    var _result = array_create(_length);
-                    	    for (var _i = 0; _i < _length; ++_i) {
-                    		    _result[_i]=$"{_key}={_array[_i]}"; 
-                    	    }
-                    	    return string_join_ext("&", _result);
-                        } 
-                        
-                    	var _keys = struct_get_names(_params);
-                    	var _length = array_length(_keys);
-                    
-                        // build full url from params (remove undefined entries)
-                        var _j = 0;
-                    	for (var _i = 0; _i < _length; _i++)
-                    	{
-                    		var _key = _keys[_i];
-                    		var _value = struct_get(_params, _keys[_i]);
-                    
-                            if (is_undefined(_value)) continue;
-                    
-                    		_result[_j++] = is_array(_value) ? params_build_array(_key, _value) : $"{_key}={_value}";
-                    	}
-                    
-                    	var _str = string_pos("?", _url_base) == 0 ? "?" : "";
-                    	_str += string_join_ext("&", _result, 0, _j);
-                    
-                    	return _url_base + _str;
-                    }
-                    """)
-                .Line();
-
-                body.JsDoc(builder =>
+            w.JsDoc(b => b
+                .Param(new ParamDoc("_url",          "String",           null))
+                .Param(new ParamDoc("_params",        "Struct|Undefined", null))
+                .Param(new ParamDoc("_method",        "String",           null))
+                .Param(new ParamDoc("_body",          "Any",              null))
+                .Param(new ParamDoc("_content_type",  "String|Undefined", null))
+                .Param(new ParamDoc("_security",      "Array|Undefined",  null))
+                .Param(new ParamDoc("_cookies",       "Struct|Undefined", "Per-request cookies merged with the cookie jar on send."))
+                .Param(new ParamDoc("_callback",      "Function",         null))
+                .Param(new ParamDoc("_where",         "String",           null)))
+             .Struct($"{n.StructPrefix}Request",
+                ["_url", "_params", "_method", "_body", "_content_type", "_security", "_cookies", "_callback", "_where"],
+                body =>
                 {
-                    builder
-                    .Line("@func _apply_auth")
-                    .Description("Injects credentials for the named security scheme.")
-                    .Param(new ParamDoc("_header", "Id.DsMap", "Map that will contain the header metadata."))
-                    .Param(new ParamDoc("_params", "Struct", "Url params that will be sent with the request."))
-                    .Param(new ParamDoc("_scheme", "String", "The name of the secutiry scheme being processed."))
-                    .Param(new ParamDoc("_where", "String", "The callee of this function (used for debugging purposes)."))
-                    .Tag("ignore");
-                })
-                .Assign("_apply_auth", expr => expr.Method(["_header", "_params", "_scheme", "_where"], fnBody =>
-                {
-                    // When a token is missing print a message to the user
-                    fnBody.Assign("missing", expr => expr.Method(["_where", "_token"], methodBody =>
-                    {
-                        methodBody.Call("show_debug_message", "$\"{_where} :: missing credential for {_token}, skipping this auth method.\"").Line(";");
-                    }), VariableScope.Static);
-                    fnBody.Line();
+                    body.Assign("__", w => w.StructLiteral([
+                        new("url",          "_url"),
+                        new("params",       "_params"),
+                        new("http_method",  "_method"),
+                        new("content_type", "_content_type"),
+                        new("raw_body",     "undefined"),
+                        new("callback",     "_callback"),
+                        new("security",     "_security"),
+                        new("cookies",      "_cookies"),
+                        new("where",        "_where"),
+                    ], multiline: true)).Line();
 
-                    // Switch on the available schemes from the spec
-                    fnBody.Switch("_scheme", sw =>
-                    {
-                        foreach (var s in ir.AuthSchemes)
+                    body.Assign("attempts", "0").Line();
+
+                    body.JsDoc(b => b.Returns("Function"))
+                        .Assign("get_callback", w => w.Method([], fn =>
                         {
-                            var tokenLit = $"\"{s.Name}\"";
-                            sw.Case(tokenLit, caseBody =>
-                            {
+                            fn.Return("__.callback");
+                        }), VariableScope.Static).Line();
 
-                                caseBody.Assign($"_{s.Name}_token", expr => expr.Call($"{n.Priv}request_auth_get_token", tokenLit), VariableScope.Local);
-                                caseBody.If($"is_undefined(_{s.Name}_token)", ifBody =>
+                    body.JsDoc(b => b.Returns("Real"))
+                        .Assign("send", w => w.Method([], fn =>
+                        {
+                            fn.Assign("_id",   "-1",   VariableScope.Local)
+                              .Assign("_self", "self", VariableScope.Local);
+
+                            fn.With("__", inner =>
+                            {
+                                inner.Assign("_params", "params ?? {}", VariableScope.Local)
+                                     .Assign("_header", "ds_map_create()", VariableScope.Local).Line();
+
+                                inner.Comment("inject security");
+                                inner.Assign("_sec_count", "array_length(security)", VariableScope.Local);
+                                inner.For("var _i = 0", "_i < _sec_count", "_i++", loop =>
+                                    loop.Line($"_self._apply_auth(_header, _params, security[_i], where);")).Line();
+
+                                inner.Assign("_instance", $"{n.Priv}get_singleton(where)", VariableScope.Local).Line();
+
+                                inner.Comment("cookies: jar entries first, then per-request overrides");
+                                inner.Assign("_cookie_parts", "[]",              VariableScope.Local)
+                                     .Assign("_j",            "0",              VariableScope.Local)
+                                     .Assign("_jar_keys",   "struct_get_names(_instance.cookie_jar)", VariableScope.Local)
+                                     .Assign("_jar_count",  "array_length(_jar_keys)", VariableScope.Local);
+                                inner.For("var _i = 0", "_i < _jar_count", "_i++", loop =>
                                 {
-                                    ifBody.Call("missing", tokenLit, "_where").Line(";");
-                                    ifBody.Line("break;");
+                                    loop.Assign("_k", "_jar_keys[_i]", VariableScope.Local)
+                                        .Line("_cookie_parts[_j++] = $\"{_k}={_instance.cookie_jar[$ _k]}\";");
                                 });
-
-                                switch (s)
+                                inner.If("!is_undefined(cookies)", ifBody =>
                                 {
-                                    case IrBasicScheme auth:
-                                        caseBody.AppendLine($"_header[? \"Authorization\"] = $\"Simple {{base64_encode(_{s.Name}_token)}}\";");
-                                        break;
-                                    case IrBearerScheme bearerAuth:
-                                        caseBody.AppendLine($"_header[? \"Authorization\"] = $\"Bearer {{_{s.Name}_token}}\";");
-                                        break;
-                                    case IrApiKeyScheme apiKeyScheme:
-                                        switch (apiKeyScheme.In)
+                                    ifBody.Assign("_exp_keys",  "struct_get_names(cookies)",    VariableScope.Local)
+                                          .Assign("_exp_count", "array_length(_exp_keys)",      VariableScope.Local);
+                                    ifBody.For("var _i = 0", "_i < _exp_count", "_i++", loop =>
+                                    {
+                                        loop.Assign("_k", "_exp_keys[_i]", VariableScope.Local)
+                                            .Line("_cookie_parts[_j++] = $\"{_k}={cookies[$ _k]}\";");
+                                    });
+                                });
+                                inner.If("_j > 0", ifBody =>
+                                    ifBody.Line("_header[? \"Cookie\"] = string_join_ext(\"; \", _cookie_parts, 0, _j);")).Line();
+
+                                inner.Assign("_url", "_self._build_url(url, _params)", VariableScope.Local).Line();
+
+                                inner.If("!is_undefined(raw_body)", ifBody =>
+                                {
+                                    ifBody.Comment("set Content-Type before converter so it can override (e.g. multipart boundary)");
+                                    ifBody.Line("_header[? \"Content-Type\"] = content_type;");
+                                    ifBody.Assign("_processed", "_self._process_body(raw_body, content_type, _header, where)", VariableScope.Local);
+                                    ifBody.If("is_string(_processed)",
+                                        thenBody => thenBody.Line("_id = http_request(_url, http_method, _header, _processed);"),
+                                        elseBody =>
                                         {
-                                            case IrLocation.Header:
-                                                caseBody.AppendLine($"_header[? \"{apiKeyScheme.KeyName}\"] = _{s.Name}_token;");
+                                            elseBody.Line("_id = http_request(_url, http_method, _header, _processed);");
+                                            elseBody.Line("buffer_delete(_processed);");
+                                        });
+                                }, elseBody =>
+                                {
+                                    elseBody.Line("_id = http_request(_url, http_method, _header, \"\");");
+                                });
+                                inner.Line();
+
+                                inner.Line("_instance.requests[? _id] = _self;");
+                                inner.Line("ds_map_destroy(_header);");
+                            });
+
+                            fn.Line("attempts++;");
+                            fn.Return("_id");
+                        }), VariableScope.Static).Line();
+
+                    body.JsDoc(b => b.Returns("Real"))
+                        .Assign("retry", w => w.Method([], fn => fn.Return("send()")), VariableScope.Static).Line();
+
+                    body.JsDoc(b => b
+                            .Param(new ParamDoc("_body",         "Any",       null))
+                            .Param(new ParamDoc("_content_type", "String",    null))
+                            .Param(new ParamDoc("_header",       "Id.DsMap",  "Converter may mutate this (e.g. multipart sets boundary)."))
+                            .Param(new ParamDoc("_where",        "String",    null))
+                            .Returns("String|Id.Buffer")
+                            .Tag("ignore"))
+                        .Assign("_process_body", w => w.Method(["_body", "_content_type", "_header", "_where"], fn =>
+                        {
+                            fn.Assign("_conv", $"{n.Priv}request_body_get_converter(_content_type)", VariableScope.Local);
+                            fn.If("!is_callable(_conv)", ifBody =>
+                                ifBody.Line($"show_error($\"{{_where}} :: No converter for '{{_content_type}}'.\", true);"));
+                            fn.Line("_body = _conv(_body, _header);");
+                            fn.If("!is_string(_body) && (!is_handle(_body) || !string_starts_with(string(_body), \"ref buffer\"))", ifBody =>
+                                ifBody.Line($"show_error($\"{{_where}} :: Body converter must return a string or buffer.\", true);"));
+                            fn.Line("// feather ignore once GM1045");
+                            fn.Return("_body");
+                        }), VariableScope.Static).Line();
+
+                    body.JsDoc(b => b
+                            .Param(new ParamDoc("_url_base", "String",           null))
+                            .Param(new ParamDoc("_params",   "Struct|Undefined", null, Optional: true))
+                            .Returns("String")
+                            .Tag("ignore"))
+                        .Assign("_build_url", w => w.Method(["_url_base", "_params = undefined"], fn =>
+                        {
+                            fn.Assign("_result", "[]", VariableScope.Static);
+                            fn.Assign("_params_build_array", w => w.Method(["_key", "_array"], inner =>
+                            {
+                                inner.Assign("_len", "array_length(_array)", VariableScope.Local)
+                                     .Assign("_r",   "array_create(_len)",  VariableScope.Local);
+                                inner.For("var _i = 0", "_i < _len", "++_i",
+                                    loop => loop.Line("_r[_i] = $\"{_key}={_array[_i]}\";"));
+                                inner.Return("string_join_ext(\"&\", _r)");
+                            }), VariableScope.Static).Line();
+
+                            fn.If("is_undefined(_params)", ifBody => ifBody.Return("_url_base")).Line();
+
+                            fn.Assign("_keys",   "struct_get_names(_params)", VariableScope.Local)
+                              .Assign("_length", "array_length(_keys)",        VariableScope.Local)
+                              .Assign("_j",      "0",                          VariableScope.Local);
+                            fn.For("var _i = 0", "_i < _length", "_i++", loop =>
+                            {
+                                loop.Assign("_key",   "_keys[_i]",             VariableScope.Local)
+                                    .Assign("_value", "struct_get(_params, _key)", VariableScope.Local);
+                                loop.If("is_undefined(_value)", ifBody => ifBody.Line("continue;"));
+                                loop.Line("_result[_j++] = is_array(_value) ? _params_build_array(_key, _value) : $\"{_key}={_value}\";");
+                            }).Line();
+
+                            fn.If("_j == 0", ifBody => ifBody.Return("_url_base"));
+                            fn.Assign("_sep", "string_pos(\"?\", _url_base) == 0 ? \"?\" : \"&\"", VariableScope.Local);
+                            fn.Return("_url_base + _sep + string_join_ext(\"&\", _result, 0, _j)");
+                        }), VariableScope.Static).Line();
+
+                    body.JsDoc(b => b
+                            .Param(new ParamDoc("_header", "Id.DsMap", null))
+                            .Param(new ParamDoc("_params", "Struct",   null))
+                            .Param(new ParamDoc("_scheme", "String",   null))
+                            .Param(new ParamDoc("_where",  "String",   null))
+                            .Tag("ignore"))
+                        .Assign("_apply_auth", w => w.Method(["_header", "_params", "_scheme", "_where"], fn =>
+                        {
+                            fn.Assign("missing", w => w.Method(["_where", "_token"], inner =>
+                                inner.Line("show_debug_message($\"{_where} :: missing credential for '{_token}', skipping auth.\");")),
+                                VariableScope.Static).Line();
+
+                            fn.Switch("_scheme", sw =>
+                            {
+                                foreach (var s in ir.AuthSchemes)
+                                {
+                                    var sn = s.Name;
+                                    sw.Case($"\"{sn}\"", caseBody =>
+                                    {
+                                        caseBody.Assign($"_{sn}_token", $"{n.Priv}request_auth_get_token(\"{sn}\")", VariableScope.Local);
+                                        caseBody.If($"is_undefined(_{sn}_token)", ifBody =>
+                                        {
+                                            ifBody.Line($"missing(_where, \"{sn}\");");
+                                            ifBody.Line("break;");
+                                        });
+
+                                        switch (s)
+                                        {
+                                            case IrAuthScheme.Basic:
+                                                caseBody.Line($"_header[? \"Authorization\"] = $\"Simple {{base64_encode(_{sn}_token)}}\";");
                                                 break;
-                                            case IrLocation.Query:
-                                                caseBody.AppendLine($"_params[$ \"{apiKeyScheme.KeyName}\"] = _{s.Name}_token;");
+                                            case IrAuthScheme.Bearer:
+                                                caseBody.Line($"_header[? \"Authorization\"] = $\"Bearer {{_{sn}_token}}\";");
+                                                break;
+                                            case IrAuthScheme.ApiKey apiKey when apiKey.In == IrLocation.Header:
+                                                caseBody.Line($"_header[? \"{apiKey.ParamName}\"] = _{sn}_token;");
+                                                break;
+                                            case IrAuthScheme.ApiKey apiKey when apiKey.In == IrLocation.Query:
+                                                caseBody.Line($"_params[$ \"{apiKey.ParamName}\"] = _{sn}_token;");
                                                 break;
                                         }
-                                        break;
-                                    default:
-                                        break;
+                                    });
                                 }
+
+                                sw.Case("undefined", caseBody => { });
+                                sw.Default(d =>
+                                    d.Line("show_debug_message($\"{_where} :: No auth rule for '{_scheme}'.\");"));
                             });
-                        }
-                        sw.Case("undefined", body => { }, true);
-                        sw.Default(d => d.Line("show_debug_message($\"{_where} :: No auth rule for '{_scheme}'.\");"));
-                    });
-                }), VariableScope.Static)
-                .Line();
+                        }), VariableScope.Static).Line();
 
-                body.Lines($$"""
-                    // Handle request body
-                    if (!is_undefined(_body)) {
-                        _body = _process_body(_body, _content_type, _where);
-                        if (!is_string(_body)) 
-                        {
-                        	__.body_type = 1; // buffer
-                        	__.body = buffer_base64_encode(_body, 0, -1); // we base64 encode the buffer so we can re-use it.
-                        }
-                    	else
-                    	{
-                    		__.body = _body;
-                    	}
-                    }
-                    """);
-            })
-            .Line();
+                    body.Comment("body processing deferred to send() so the converter can see the live header");
+                    body.If("!is_undefined(_body)", ifBody =>
+                        ifBody.Line("__.raw_body = _body;"));
+                }).Line();
 
-            // Creates a new request internal
-            w.Lines($$"""
-                /**
-                 * A wrapper function that will create a new {{n.StructPrefix}}Request and immediately trigger it.
-                 * @param {String} _url Url used in the request (without the parameters)
-                 * @param {Struct|Undefined} _params Url params that will be sent with the request.
-                 * @param {String} _method Method that will be used by the request.
-                 * @param {Any} _body The body of the request can be either a string or a buffer.
-                 * @param {String|Undefined} _content_type The content type used for formatting the body.
-                 * @param {Array} _security An array with all the security schemes that should be injected into the request.
-                 * @param {Function} _callback The callback function to be executed once the request finishes.
-                 * @param {String} _where The callee of this function (used for debugging purposes).
-                 * @returns {Real}
-                 * @ignore
-                 */
-                function {{n.Priv}}create_request(_url, _params, _method, _body, _content_type, _security, _callback, _where)
+            EmitCreateRequest(w, n);
+            w.Line();
+            EmitCookieApi(w, n);
+        }
+
+        private static void EmitCreateRequest(GmlWriter w, GmlNaming n)
+        {
+            w.JsDoc(b => b
+                .Param(new ParamDoc("_url",          "String",           null))
+                .Param(new ParamDoc("_params",        "Struct|Undefined", null))
+                .Param(new ParamDoc("_method",        "String",           null))
+                .Param(new ParamDoc("_body",          "Any",              null))
+                .Param(new ParamDoc("_content_type",  "String|Undefined", null))
+                .Param(new ParamDoc("_security",      "Array|Undefined",  null))
+                .Param(new ParamDoc("_cookies",       "Struct|Undefined", null))
+                .Param(new ParamDoc("_callback",      "Function",         null))
+                .Param(new ParamDoc("_where",         "String",           null))
+                .Returns("Real")
+                .Tag("ignore"))
+             .Function($"{n.Priv}create_request",
+                ["_url", "_params", "_method", "_body", "_content_type", "_security", "_cookies", "_callback", "_where"],
+                fn =>
                 {
-                	var _request = new {{n.StructPrefix}}Request(_url, _params, _method, _body, _content_type, _security, _callback, _where);
-                	return _request.send();
-                }
-                """);
+                    fn.Assign("_req", $"new {n.StructPrefix}Request(_url, _params, _method, _body, _content_type, _security, _cookies, _callback, _where)", VariableScope.Local)
+                      .Return("_req.send()");
+                }).Line();
+        }
+
+        private static void EmitCookieApi(GmlWriter w, GmlNaming n)
+        {
+            w.JsDoc(b => b
+                .Param(new ParamDoc("_name",  "String", null))
+                .Param(new ParamDoc("_value", "String", null)))
+             .Function($"{n.Pub}cookie_set", ["_name", "_value"], fn =>
+             {
+                 fn.Assign("_instance", $"{n.Priv}get_singleton(_GMFUNCTION_)", VariableScope.Local)
+                   .Assign(w => w.Access("_instance.cookie_jar", AccessorKind.Struct, "_name"), "_value");
+             }).Line();
+
+            w.JsDoc(b => b
+                .Param(new ParamDoc("_name", "String", null))
+                .Returns("String|Undefined"))
+             .Function($"{n.Pub}cookie_get", ["_name"], fn =>
+             {
+                 fn.Assign("_instance", $"{n.Priv}get_singleton(_GMFUNCTION_)", VariableScope.Local)
+                   .Return(r => r.Access("_instance.cookie_jar", AccessorKind.Struct, "_name"));
+             }).Line();
+
+            w.JsDoc(b => b.Param(new ParamDoc("_name", "String", null)))
+             .Function($"{n.Pub}cookie_delete", ["_name"], fn =>
+             {
+                 fn.Assign("_instance", $"{n.Priv}get_singleton(_GMFUNCTION_)", VariableScope.Local)
+                   .Line("struct_remove(_instance.cookie_jar, _name);");
+             }).Line();
+
+            w.Function($"{n.Pub}cookie_clear", [], fn =>
+            {
+                fn.Assign("_instance", $"{n.Priv}get_singleton(_GMFUNCTION_)", VariableScope.Local)
+                  .Assign("_instance.cookie_jar", "{}");
+            }).Line();
+
+            w.JsDoc(b => b
+                .Param(new ParamDoc("_set_cookie_header", "String", "Raw Set-Cookie header value, may be comma-joined."))
+                .Tag("ignore"))
+             .Function($"{n.Priv}cookie_capture", ["_set_cookie_header"], fn =>
+             {
+                 fn.Assign("_instance", $"{n.Priv}get_singleton(_GMFUNCTION_)", VariableScope.Local);
+                 fn.Assign("_parts", "string_split(_set_cookie_header, \",\")", VariableScope.Local)
+                   .Assign("_count", "array_length(_parts)", VariableScope.Local);
+
+                 fn.For("var _i = 0", "_i < _count", "_i++", loop =>
+                 {
+                     loop.Assign("_pair_parts", "string_split(_parts[_i], \";\")", VariableScope.Local);
+                     loop.If("array_length(_pair_parts) == 0", ifBody => ifBody.Line("continue;"));
+                     loop.Assign("_pair", "string_trim(_pair_parts[0])", VariableScope.Local)
+                         .Assign("_eq",   "string_pos(\"=\", _pair)",   VariableScope.Local);
+                     loop.If("_eq <= 0", ifBody => ifBody.Line("continue;"));
+                     loop.Assign("_name",  "string_trim(string_copy(_pair, 1, _eq - 1))", VariableScope.Local)
+                         .Assign("_value", "string_copy(_pair, _eq + 1, string_length(_pair) - _eq)", VariableScope.Local);
+                     loop.If("string_length(_name) > 0", ifBody =>
+                         ifBody.Assign(w => w.Access("_instance.cookie_jar", AccessorKind.Struct, "_name"), "_value"));
+                 });
+             }).Line();
         }
     }
 }

@@ -1,6 +1,6 @@
-﻿using codegencore.Model;
+using codegencore.Model;
 using codegencore.Writers.Lang;
-using GMSwaggerCodeGen.Helpers;
+using openapigen.Helpers;
 using openapigen.Model;
 using System.Collections.Immutable;
 

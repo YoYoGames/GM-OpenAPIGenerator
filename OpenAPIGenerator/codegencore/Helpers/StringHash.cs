@@ -4,7 +4,7 @@ using System.Linq;
 using System.Text;
 using System.Threading.Tasks;
 
-namespace extgencore.Helpers
+namespace codegencore.Helpers
 {
     /// <summary>
     /// Non-cryptographic 32-bit hash helper (FNV-1a).

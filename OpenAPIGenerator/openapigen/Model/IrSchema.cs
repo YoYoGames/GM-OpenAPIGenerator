@@ -1,5 +1,5 @@
-﻿using codegencore.Model;
-using GMSwaggerCodeGen;
+using codegencore.Model;
+using openapigen;
 using System.Collections.Immutable;
 
 namespace openapigen.Model

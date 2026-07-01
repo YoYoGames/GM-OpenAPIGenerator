@@ -1,4 +1,4 @@
-﻿namespace GMSwaggerCodeGen.Helpers
+namespace openapigen.Helpers
 {
     public sealed record GmlNaming(string Prefix = "gm")
     {

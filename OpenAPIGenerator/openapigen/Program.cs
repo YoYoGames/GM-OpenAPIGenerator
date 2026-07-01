@@ -1,78 +1,89 @@
-﻿using CommandLine;
-using GMSwaggerCodeGen.Emitters;
-using GMSwaggerCodeGen.Emitters.Docs;
-using GMSwaggerCodeGen.Emitters.Gml;
-using GMSwaggerCodeGen.Helpers;
-using GMSwaggerCodeGen.Parsing.OpenApi;
+using NDesk.Options;
+using openapigen.App;
+using openapigen.Config;
+using System.Text.Json;
+using System.Text.Json.Serialization;
 
-namespace GMSwaggerCodeGen
+namespace openapigen
 {
-    internal sealed class Options
-    {
-        [Option('i', "input", Required = true,
-                HelpText = "Path to schema file (OpenAPI).")]
-        public FileInfo Input { get; set; } = default!;
-
-        [Option('o', "output",
-                HelpText = "Output directory (default: ./build).",
-                Default = "build")]
-        public string Output { get; set; } = default!;
-
-        [Option("lang",
-                HelpText = "Comma-separated list of targets (gml, docs).",
-                Separator = ',',
-                Default = new[] { "gml", "docs" })]
-        public IEnumerable<string> Languages { get; set; } = default!;
-
-        [Option("prefix", 
-            HelpText = "Namespace prefix for generated names (default: gm)",
-            Default = "gm")]
-        public string Namespace { get; set; } = default!;
-    }
-
     public static class Program
     {
-        public static int Main(string[] args)
-            => Parser.Default.ParseArguments<Options>(args)
-                .MapResult(RunGeneration, errs => 1);
-
-        private static int RunGeneration(Options opt)
+        private static readonly JsonSerializerOptions JsonOptions = new()
         {
-            if (!opt.Input.Exists)
-            {
-                Console.Error.WriteLine($"Input file not found: {opt.Input}");
-                return 2;
-            }
+            PropertyNameCaseInsensitive = true,
+            ReadCommentHandling = JsonCommentHandling.Skip,
+            AllowTrailingCommas = true,
+            DefaultIgnoreCondition = JsonIgnoreCondition.WhenWritingNull,
+            WriteIndented = true,
+            Converters = { new JsonStringEnumConverter() }
+        };
 
-            var outDir = new DirectoryInfo(opt.Output);
-            outDir.Create();
+        public static int Main(string[] args)
+        {
+            string? configPath = null;
+            string? initDir = null;
+            string? inputPath = null;
+            string outputDir = "build";
+            string prefix = "gm";
+            bool docs = false;
+            bool showHelp = false;
 
-            var compilation = OpenApiSchemaLoader.LoadFromFile(opt.Input.FullName);
-
-            var naming = new GmlNaming(opt.Namespace);
-            var emitters = new Dictionary<string, IIrEmitter>(StringComparer.OrdinalIgnoreCase)
-            {
-                ["gml"] = new HttpGmlEmitter(naming),
-                ["docs"] = new DocsEmitter(naming),
+            var options = new OptionSet {
+                { "c|config=",  "Path to JSON config file.",                          v => configPath = v },
+                { "i|input=",   "OpenAPI spec file (direct mode, no config needed).", v => inputPath  = v },
+                { "o|output=",  "Output directory (default: build).",                 v => outputDir  = v },
+                { "prefix=",    "Name prefix for generated symbols (default: gm).",   v => prefix     = v },
+                { "docs",       "Also emit JSDoc files (direct mode only).",          v => docs       = v != null },
+                { "init=",      "Bootstrap a config.json in the given folder.",       v => initDir    = v },
+                { "h|help",     "Show this help text.",                               v => showHelp   = v != null },
             };
 
-            foreach (var lang in opt.Languages)
+            try
             {
-                if (!emitters.TryGetValue(lang, out var em))
+                var extras = options.Parse(args);
+
+                if (!string.IsNullOrWhiteSpace(initDir))
                 {
-                    Console.Error.WriteLine($"Unknown lang '{lang}'.");
-                    return 3;
+                    var schemaSvc   = new ConfigSchemaService(JsonOptions);
+                    var initializer = new ProjectInitializer(schemaSvc, JsonOptions);
+                    return initializer.Init(initDir);
                 }
 
-                var targetDir = outDir.FullName;
-                Directory.CreateDirectory(targetDir);
+                if (showHelp || (string.IsNullOrWhiteSpace(configPath) && string.IsNullOrWhiteSpace(inputPath)) || extras.Count > 0)
+                {
+                    ShowUsage(options);
+                    return showHelp ? 0 : 1;
+                }
 
-                Console.WriteLine($"[CodeGen] {lang.ToUpper()} -> {targetDir}");
-                em.Emit(compilation, targetDir);
+                var schemaSvc2 = new ConfigSchemaService(JsonOptions);
+                var runner     = new CodegenRunner(JsonOptions, schemaSvc2);
+
+                if (!string.IsNullOrWhiteSpace(configPath))
+                    return runner.RunFromConfig(configPath!);
+
+                return runner.RunDirect(inputPath!, outputDir, prefix, docs);
             }
+            catch (OptionException e)
+            {
+                Console.Error.WriteLine(e.Message);
+                ShowUsage(options);
+                return 2;
+            }
+            catch (Exception ex)
+            {
+                Console.Error.WriteLine(ex.ToString());
+                return 99;
+            }
+        }
 
-            Console.WriteLine("[CodeGen] Success [x]");
-            return 0;
+        private static void ShowUsage(OptionSet options)
+        {
+            Console.WriteLine("Usage:");
+            Console.WriteLine("  openapigen --config <path/to/config.json>");
+            Console.WriteLine("  openapigen --input <spec.json> [--output <dir>] [--prefix <name>] [--docs]");
+            Console.WriteLine("  openapigen --init <folder>");
+            Console.WriteLine();
+            options.WriteOptionDescriptions(Console.Out);
         }
     }
 }

@@ -1,9 +1,9 @@
-﻿using CodeGenCore.Writers;
+using codegencore.Writers.Lang;
 
-namespace GMSwaggerCodeGen.Helpers;
+namespace openapigen.Helpers;
 
 internal static class WriterExt
 {
-    public static ICodeWriter FieldAssign(this ICodeWriter io, string lhs, string rhs)
-        => io.AppendLine($"{lhs} = {rhs};");
+    public static GmlWriter FieldAssign(this GmlWriter w, string lhs, string rhs)
+        => w.Line($"{lhs} = {rhs};");
 }

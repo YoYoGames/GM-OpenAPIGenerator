@@ -1,7 +1,7 @@
-﻿using System.Text;
+using System.Text;
 using System.Text.RegularExpressions;
 
-namespace GMSwaggerCodeGen.Emitters.Gml
+namespace openapigen.Emitters.Gml
 {
     public static partial class GmlEndpointName
     {

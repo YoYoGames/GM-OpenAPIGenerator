@@ -1,5 +1,5 @@
-﻿using codegencore.Model;
-using GMSwaggerCodeGen.Emitters.Gml;
+using codegencore.Model;
+using openapigen.Emitters.Gml;
 using Microsoft.OpenApi;
 using openapigen.Model;
 using System.Collections.Immutable;

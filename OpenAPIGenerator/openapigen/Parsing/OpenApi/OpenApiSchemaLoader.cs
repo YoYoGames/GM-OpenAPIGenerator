@@ -1,10 +1,10 @@
-﻿using Microsoft.OpenApi;
+using Microsoft.OpenApi;
 using Microsoft.OpenApi.Reader;
 using openapigen.Model;
 using openapigen.Parsing.OpenApi;
 using System.Text;
 
-namespace GMSwaggerCodeGen.Parsing.OpenApi
+namespace openapigen.Parsing.OpenApi
 {
     /// <summary>
     /// Entry point: load an OpenAPI 3.x YAML/JSON file and return a

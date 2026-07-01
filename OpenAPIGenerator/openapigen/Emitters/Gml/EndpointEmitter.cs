@@ -1,7 +1,7 @@
-﻿using codegencore.Model;
+using codegencore.Model;
 using codegencore.Writers.JSDoc;
 using codegencore.Writers.Lang;
-using GMSwaggerCodeGen.Helpers;
+using openapigen.Helpers;
 using openapigen.Helpers;
 using openapigen.Model;
 using System.Text.RegularExpressions;
@@ -105,15 +105,9 @@ namespace openapigen.Emitters.Gml
                     fn.Assign(paramExpr, "{ " + string.Join(", ", qs.Select(p => $"{p.Name} : {NameUtils.ParamName(p.Name)}")) + " }", VariableScope.Local).Line();
                 }
 
-                // security (OR of AND-sets)
                 var secExpr = BuildSecurityExpr(ep.Auth);
-                if (secExpr == "undefined")
+                if (secExpr != "undefined")
                 {
-                    // no auth
-                }
-                else
-                {
-                    fn.Comment("create security alternatives (OR of AND)");
                     fn.Assign(SecurityVar, secExpr, VariableScope.Local).Line();
                 }
 
@@ -127,6 +121,7 @@ namespace openapigen.Emitters.Gml
                     needsBody ? "_body" : "undefined",
                     ctExpr,
                     secArg,
+                    "undefined",        // _cookies — per-endpoint cookie params not yet supported
                     "_callback",
                     "_GMFUNCTION_"
                 }));
@@ -138,37 +133,20 @@ namespace openapigen.Emitters.Gml
 
         private static string BuildSecurityExpr(IrAuthPolicy policy)
         {
-            // Canonical "no auth": a single alternative that contains IrAuthRequirement.None
+            // Canonical "no auth": a single alternative containing IrAuthRequirement.None
             if (policy.Alternatives.Length == 1 &&
                 policy.Alternatives[0].Requirements.Length == 1 &&
                 policy.Alternatives[0].Requirements[0] is IrAuthRequirement.None)
                 return "undefined";
 
-            // Build: [ ["SchemeA","SchemeB"], ["SchemeC"] ]
-            // None inside an alternative means "no auth for that alt" => [] (satisfiable immediately)
-            var altExprs = new List<string>();
+            // Flatten to a unique list of scheme names — _apply_auth switches on each element as a string
+            var names = policy.Alternatives
+                .SelectMany(alt => alt.Requirements.OfType<IrAuthRequirement.Scheme>())
+                .Select(s => $"\"{s.SchemeName}\"")
+                .Distinct()
+                .ToArray();
 
-            foreach (var alt in policy.Alternatives)
-            {
-                if (alt.Requirements.Any(r => r is IrAuthRequirement.None))
-                {
-                    altExprs.Add("[]");
-                    continue;
-                }
-
-                var schemes = alt.Requirements
-                    .OfType<IrAuthRequirement.Scheme>()
-                    .Select(s => $"\"{s.SchemeName}\"")
-                    .ToArray();
-
-                if (schemes.Length == 0)
-                    altExprs.Add("[]");
-                else
-                    altExprs.Add("[ " + string.Join(", ", schemes) + " ]");
-            }
-
-            if (altExprs.Count == 0) return "undefined";
-            return "[ " + string.Join(", ", altExprs) + " ]";
+            return names.Length == 0 ? "undefined" : "[ " + string.Join(", ", names) + " ]";
         }
     }
 }

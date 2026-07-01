@@ -8,7 +8,7 @@
 //     otherwise a return‑buffer pair is appended to the call.
 // -----------------------------------------------------------------------------
 
-namespace extgencore.Helpers
+namespace codegencore.Helpers
 {
     public static class ScalarTypes
     {
