@@ -51,7 +51,7 @@ namespace openapigen.Emitters.Gml
             w.JsDoc(b => b
                 .Param(new ParamDoc("_token_id", "String", $"One of: {schemeList}"))
                 .Param(new ParamDoc("_token", "String", null)))
-             .Function($"{n.Priv}request_auth_set_token", ["_token_id", "_token"], fn =>
+             .Function($"{n.Pub}request_auth_set_token", ["_token_id", "_token"], fn =>
              {
                  fn.Assign("_instance", $"{n.Priv}get_singleton(_GMFUNCTION_)", VariableScope.Local)
                    .Assign(w => w.Access("_instance.auth_tokens", AccessorKind.Struct, "_token_id"), "_token");
@@ -69,7 +69,7 @@ namespace openapigen.Emitters.Gml
             w.JsDoc(b => b
                 .Param(new ParamDoc("_content_type", "String", null))
                 .Param(new ParamDoc("_function", "Function", "function(_body, _header_ds_map) → String|Id.Buffer")))
-             .Function($"{n.Priv}request_body_set_converter", ["_content_type", "_function"], fn =>
+             .Function($"{n.Pub}request_body_set_converter", ["_content_type", "_function"], fn =>
              {
                  fn.Assign("_instance", $"{n.Priv}get_singleton(_GMFUNCTION_)", VariableScope.Local)
                    .Assign(w => w.Access("_instance.type_converters", AccessorKind.Struct, "_content_type"), "_function");
@@ -87,7 +87,7 @@ namespace openapigen.Emitters.Gml
             w.JsDoc(b => b
                 .Param(new ParamDoc("_code", "Real", null))
                 .Param(new ParamDoc("_hook", "Function", null)))
-             .Function($"{n.Priv}request_response_set_hook", ["_code", "_hook"], fn =>
+             .Function($"{n.Pub}request_response_set_hook", ["_code", "_hook"], fn =>
              {
                  fn.Assign("_instance", $"{n.Priv}get_singleton(_GMFUNCTION_)", VariableScope.Local)
                    .Assign(w => w.Access("_instance.response_hooks", AccessorKind.Map, "_code"), "_hook");
