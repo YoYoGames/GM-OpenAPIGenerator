@@ -134,17 +134,21 @@ namespace openapigen.Helpers
             string where,
             string displayName)
         {
-            // Follow aliases at the declaration level too
-            var decl = resolver.Get(schemaName);
+            if (!resolver.TryGet(schemaName, out var decl)) return;
             decl = resolver.UnaliasDecl(decl);
 
-            // Struct / Enum / OneOf / AnyOf / AllOf all get a validator function
-            // Convention: <StructPrefix><SchemaName>_validate(value, where)
-            var fnName = $"{n.StructPrefix}{schemaName}_validate";
+            switch (decl)
+            {
+                case IrSchema.Struct:
+                    w.Line($"{n.StructPrefix}{schemaName}_validate({id}, {where});");
+                    break;
 
-            // For non-struct schemas, you still generate a validator stub later.
-            // For now, always call it if the schema exists.
-            w.Line($"{fnName}({id}, {where});");
+                case IrSchema.Enum:
+                    w.Line($"if (!is_string({id})) throw $\"{{{where}}} :: {SanErr(displayName)} expected String\";");
+                    break;
+
+                // Alias/OneOf/AnyOf/AllOf: validators are stubs; skip to avoid calling non-existent functions
+            }
         }
 
         private static void EmitAllOf(

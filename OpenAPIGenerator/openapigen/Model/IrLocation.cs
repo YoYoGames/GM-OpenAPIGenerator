@@ -1,5 +1,5 @@
 ﻿namespace openapigen.Model
 {
-    public enum IrLocation { Path, Query, Header }
+    public enum IrLocation { Path, Query, Header, Cookie }
 
 }

@@ -2,7 +2,6 @@ using codegencore.Model;
 using codegencore.Writers.JSDoc;
 using codegencore.Writers.Lang;
 using openapigen.Helpers;
-using openapigen.Helpers;
 using openapigen.Model;
 using System.Text.RegularExpressions;
 
@@ -21,7 +20,7 @@ namespace openapigen.Emitters.Gml
         {
             var resolver = new SchemaResolver(compilation);
 
-            var ordered = ep.Parameters.OrderByDescending(p => p.Required).ToList();
+            var ordered = ep.Parameters.Where(p => p.Location != IrLocation.Cookie).OrderByDescending(p => p.Required).ToList();
             var sig = ordered.Select(p => p.Required
                     ? NameUtils.ParamName(p.Name)
                     : $"{NameUtils.ParamName(p.Name)} = undefined")
@@ -121,7 +120,7 @@ namespace openapigen.Emitters.Gml
                     needsBody ? "_body" : "undefined",
                     ctExpr,
                     secArg,
-                    "undefined",        // _cookies — per-endpoint cookie params not yet supported
+                    "undefined",
                     "_callback",
                     "_GMFUNCTION_"
                 }));

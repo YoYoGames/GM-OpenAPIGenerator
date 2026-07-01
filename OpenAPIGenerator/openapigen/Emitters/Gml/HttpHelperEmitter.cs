@@ -151,7 +151,7 @@ namespace openapigen.Emitters.Gml
                                      .Assign("_header", "ds_map_create()", VariableScope.Local).Line();
 
                                 inner.Comment("inject security");
-                                inner.Assign("_sec_count", "array_length(security)", VariableScope.Local);
+                                inner.Assign("_sec_count", "is_array(security) ? array_length(security) : 0", VariableScope.Local);
                                 inner.For("var _i = 0", "_i < _sec_count", "_i++", loop =>
                                     loop.Line($"_self._apply_auth(_header, _params, security[_i], where);")).Line();
 
@@ -187,13 +187,9 @@ namespace openapigen.Emitters.Gml
                                     ifBody.Comment("set Content-Type before converter so it can override (e.g. multipart boundary)");
                                     ifBody.Line("_header[? \"Content-Type\"] = content_type;");
                                     ifBody.Assign("_processed", "_self._process_body(raw_body, content_type, _header, where)", VariableScope.Local);
-                                    ifBody.If("is_string(_processed)",
-                                        thenBody => thenBody.Line("_id = http_request(_url, http_method, _header, _processed);"),
-                                        elseBody =>
-                                        {
-                                            elseBody.Line("_id = http_request(_url, http_method, _header, _processed);");
-                                            elseBody.Line("buffer_delete(_processed);");
-                                        });
+                                    ifBody.Line("_id = http_request(_url, http_method, _header, _processed);");
+                                    ifBody.If("!is_string(_processed)", elseBody =>
+                                        elseBody.Line("buffer_delete(_processed);"));
                                 }, elseBody =>
                                 {
                                     elseBody.Line("_id = http_request(_url, http_method, _header, \"\");");
@@ -282,10 +278,11 @@ namespace openapigen.Emitters.Gml
                                 foreach (var s in ir.AuthSchemes)
                                 {
                                     var sn = s.Name;
+                                    var snIdent = System.Text.RegularExpressions.Regex.Replace(sn, @"[^A-Za-z0-9_]", "_");
                                     sw.Case($"\"{sn}\"", caseBody =>
                                     {
-                                        caseBody.Assign($"_{sn}_token", $"{n.Priv}request_auth_get_token(\"{sn}\")", VariableScope.Local);
-                                        caseBody.If($"is_undefined(_{sn}_token)", ifBody =>
+                                        caseBody.Assign($"_{snIdent}_token", $"{n.Priv}request_auth_get_token(\"{sn}\")", VariableScope.Local);
+                                        caseBody.If($"is_undefined(_{snIdent}_token)", ifBody =>
                                         {
                                             ifBody.Line($"missing(_where, \"{sn}\");");
                                             ifBody.Line("break;");
@@ -294,16 +291,18 @@ namespace openapigen.Emitters.Gml
                                         switch (s)
                                         {
                                             case IrAuthScheme.Basic:
-                                                caseBody.Line($"_header[? \"Authorization\"] = $\"Simple {{base64_encode(_{sn}_token)}}\";");
+                                                caseBody.Line($"_header[? \"Authorization\"] = $\"Simple {{base64_encode(_{snIdent}_token)}}\";");
                                                 break;
                                             case IrAuthScheme.Bearer:
-                                                caseBody.Line($"_header[? \"Authorization\"] = $\"Bearer {{_{sn}_token}}\";");
+                                            case IrAuthScheme.OAuth2:
+                                            case IrAuthScheme.OpenIdConnect:
+                                                caseBody.Line($"_header[? \"Authorization\"] = $\"Bearer {{_{snIdent}_token}}\";");
                                                 break;
                                             case IrAuthScheme.ApiKey apiKey when apiKey.In == IrLocation.Header:
-                                                caseBody.Line($"_header[? \"{apiKey.ParamName}\"] = _{sn}_token;");
+                                                caseBody.Line($"_header[? \"{apiKey.ParamName}\"] = _{snIdent}_token;");
                                                 break;
                                             case IrAuthScheme.ApiKey apiKey when apiKey.In == IrLocation.Query:
-                                                caseBody.Line($"_params[$ \"{apiKey.ParamName}\"] = _{sn}_token;");
+                                                caseBody.Line($"_params[$ \"{apiKey.ParamName}\"] = _{snIdent}_token;");
                                                 break;
                                         }
                                     });
@@ -375,7 +374,8 @@ namespace openapigen.Emitters.Gml
                    .Line("struct_remove(_instance.cookie_jar, _name);");
              }).Line();
 
-            w.Function($"{n.Pub}cookie_clear", [], fn =>
+            w.JsDoc(_ => { })
+             .Function($"{n.Pub}cookie_clear", [], fn =>
             {
                 fn.Assign("_instance", $"{n.Priv}get_singleton(_GMFUNCTION_)", VariableScope.Local)
                   .Assign("_instance.cookie_jar", "{}");

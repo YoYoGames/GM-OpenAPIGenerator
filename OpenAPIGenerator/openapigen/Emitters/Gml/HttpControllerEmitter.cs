@@ -55,12 +55,12 @@ namespace openapigen.Emitters.Gml
 
                 if ({{n.Priv}}options_is_debug()) {
                 	var _encoded_async_load = json_encode(async_load);
-                	show_debug_message("HTTP: " + _encoded_async_load)
+                	show_debug_message("HTTP: " + _encoded_async_load);
                 }
 
                 var _code = async_load[? "http_status"];
                 var _data = async_load[? "result"];
-                var _headers = async_load[? "responseHeaders"];
+                var _headers = async_load[? "response_headers"];
 
                 if (!is_undefined(_headers)) {
                 	var _set_cookie = string_trim(_headers[$ "Set-Cookie"] ?? "");

@@ -85,6 +85,7 @@ namespace openapigen.Parsing.OpenApi
                 ParameterLocation.Path => IrLocation.Path,
                 ParameterLocation.Query => IrLocation.Query,
                 ParameterLocation.Header => IrLocation.Header,
+                ParameterLocation.Cookie => IrLocation.Cookie,
                 _ => throw new NotSupportedException()
             };
 
@@ -187,8 +188,12 @@ namespace openapigen.Parsing.OpenApi
         {
             SecuritySchemeType.Http when s.Scheme == "basic" => new IrAuthScheme.Basic(name),
             SecuritySchemeType.Http when s.Scheme == "bearer" => new IrAuthScheme.Bearer(name),
-            SecuritySchemeType.ApiKey => new IrAuthScheme.ApiKey(name, s.Name!,
-                s.In == ParameterLocation.Header ? IrLocation.Header : IrLocation.Query),
+            SecuritySchemeType.ApiKey => new IrAuthScheme.ApiKey(name, s.Name!, s.In switch
+            {
+                ParameterLocation.Header => IrLocation.Header,
+                ParameterLocation.Cookie => IrLocation.Cookie,
+                _ => IrLocation.Query
+            }),
             SecuritySchemeType.OpenIdConnect => new IrAuthScheme.OpenIdConnect(name, s.OpenIdConnectUrl!.OriginalString),
             SecuritySchemeType.OAuth2 => new IrAuthScheme.OAuth2(name, GetAllScopes(s.Flows!)),
             _ => throw new NotSupportedException()

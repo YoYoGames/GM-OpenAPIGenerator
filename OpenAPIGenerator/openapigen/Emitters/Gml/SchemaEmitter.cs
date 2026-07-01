@@ -2,7 +2,6 @@ using codegencore.Model;
 using codegencore.Writers.JSDoc;
 using codegencore.Writers.Lang;
 using openapigen.Helpers;
-using openapigen.Helpers;
 using openapigen.Model;
 
 namespace openapigen.Emitters.Gml
