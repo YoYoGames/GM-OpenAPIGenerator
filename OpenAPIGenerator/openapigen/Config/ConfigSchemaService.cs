@@ -34,7 +34,21 @@ namespace openapigen.Config
             _ = WriteSchemaBesideConfig<TConfig>(fullConfigPath, schemaName);
 
             var raw = File.ReadAllText(fullConfigPath, Encoding.UTF8);
-            JsonNode node = JsonNode.Parse(raw, new JsonNodeOptions { PropertyNameCaseInsensitive = false })
+
+            // Must match Program.JsonOptions, which enables both. This step runs before the config is
+            // deserialised, so without them a commented config fails here and the CLI's advertised
+            // tolerance is unreachable.
+            //
+            // Known limitation: patching '$schema' rewrites the file from the parsed node, and a
+            // JsonNode round-trip does not preserve comments. A commented config loads, but loses its
+            // comments the first time '$schema' actually needs updating.
+            var documentOptions = new JsonDocumentOptions
+            {
+                CommentHandling = JsonCommentHandling.Skip,
+                AllowTrailingCommas = true
+            };
+
+            JsonNode node = JsonNode.Parse(raw, new JsonNodeOptions { PropertyNameCaseInsensitive = false }, documentOptions)
                           ?? throw new JsonException("Config JSON parsed to null.");
 
             if (node is not JsonObject obj)

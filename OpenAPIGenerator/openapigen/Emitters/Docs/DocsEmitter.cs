@@ -34,7 +34,13 @@ namespace openapigen.Emitters.Docs
                 foreach (var f in StructSchemaEmitter.BuildFields(s))
                 {
                     var jsType = SchemaJsDoc.ToJsDoc(f.Field.Schema, n, resolver);
-                    var name = f.Field.Required ? f.Arg : $"[{f.Arg}]";
+
+                    // The member name, not f.Arg. @member describes what the struct holds, so it
+                    // takes the name the constructor assigns to — "userId", not the "_user_id"
+                    // argument that supplies it. The GML side documents the constructor with
+                    // @param and correctly uses f.Arg there.
+                    var name = f.Field.Required ? f.Field.Name : $"[{f.Field.Name}]";
+
                     var desc = f.Field.Description ?? string.Empty;
                     b.Line($"@member {{{jsType}}} {name} {desc}".TrimEnd());
                 }

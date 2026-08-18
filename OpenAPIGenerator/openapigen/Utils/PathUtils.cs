@@ -17,8 +17,18 @@ namespace openapigen.Utils
             if (string.IsNullOrWhiteSpace(path))
                 return string.Empty;
 
-            var expanded = Environment.ExpandEnvironmentVariables(
-                path.Replace("~", Environment.GetFolderPath(Environment.SpecialFolder.UserProfile)));
+            // Only a leading '~' is the home directory, matching the shell convention this imitates.
+            // Replacing every '~' mangled legitimate filenames: "my~helpers.gml" became
+            // "myC:\Users\<user>helpers.gml".
+            var home = Environment.GetFolderPath(Environment.SpecialFolder.UserProfile);
+            var withHome = path switch
+            {
+                "~" => home,
+                ['~', '/' or '\\', ..] => home + path[1..],
+                _ => path
+            };
+
+            var expanded = Environment.ExpandEnvironmentVariables(withHome);
 
             return Path.IsPathRooted(expanded)
                 ? expanded

@@ -22,11 +22,13 @@ namespace openapigen
         {
             string? configPath = null;
             string? initDir = null;
+            bool force = false;
             bool showHelp = false;
 
             var options = new OptionSet {
                 { "c|config=", "Path to JSON config file.", v => configPath = v },
                 { "i|init=",   "Initialize a new config + schema in the given folder.", v => initDir = v },
+                { "f|force",   "With --init, overwrite an existing config.json.", v => force = v != null },
                 { "h|help",    "Show help.", v => showHelp = v != null }
             };
 
@@ -40,7 +42,7 @@ namespace openapigen
                 {
                     var schemaSvc = new ConfigSchemaService(JsonOptions);
                     var initializer = new ProjectInitializer(schemaSvc, JsonOptions);
-                    return initializer.Init(initDir);
+                    return initializer.Init(initDir, force);
                 }
 
                 if (showHelp || string.IsNullOrWhiteSpace(configPath) || extras.Count > 0)
@@ -70,7 +72,7 @@ namespace openapigen
         {
             Console.WriteLine("Usage:");
             Console.WriteLine("  openapigen --config <path/to/config.json>");
-            Console.WriteLine("  openapigen --init <folder>");
+            Console.WriteLine("  openapigen --init <folder> [--force]");
             Console.WriteLine();
             options.WriteOptionDescriptions(Console.Out);
         }
