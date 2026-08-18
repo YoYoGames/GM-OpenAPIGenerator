@@ -7,31 +7,7 @@ namespace openapigen.Emitters.Gml
 {
     internal static class HttpControllerEmitter
     {
-        public static void Emit(IrWebCompilation ir, string dir, GmlNaming n)
-        {
-            var sw = new StringWriter();
-            var createEvent = new GmlWriter(CodeWriter.From(sw));
-            createEvent.Section("Create Event (auto-generated, DO NOT EDIT)").Line();
-            EmitCreateEvent(createEvent, ir, n);
-            createEvent.Line();
-            File.WriteAllText(Path.Combine(dir, "controller_create.gml"), sw.ToString());
-
-            sw = new StringWriter();
-            var httpEvent = new GmlWriter(CodeWriter.From(sw));
-            httpEvent.Section("Http Event (auto-generated, DO NOT EDIT)").Line();
-            EmitHttpEvent(httpEvent, ir, n);
-            httpEvent.Line();
-            File.WriteAllText(Path.Combine(dir, "controller_http.gml"), sw.ToString());
-
-            sw = new StringWriter();
-            var cleanUpEvent = new GmlWriter(CodeWriter.From(sw));
-            cleanUpEvent.Section("Clean Up Event (auto-generated, DO NOT EDIT)").Line();
-            EmitCleanUpEvent(cleanUpEvent, ir, n);
-            cleanUpEvent.Line();
-            File.WriteAllText(Path.Combine(dir, "controller_cleanup.gml"), sw.ToString());
-        }
-
-        private static void EmitCleanUpEvent(GmlWriter w, IrWebCompilation ir, GmlNaming n)
+        internal static void EmitCleanUpEvent(GmlWriter w, IrWebCompilation ir, GmlNaming n)
         {
             w.Lines("""
                 ds_map_destroy(requests);
@@ -39,90 +15,104 @@ namespace openapigen.Emitters.Gml
                 """);
         }
 
-        private static void EmitHttpEvent(GmlWriter w, IrWebCompilation ir, GmlNaming n)
+        internal static void EmitHttpEvent(GmlWriter w, IrWebCompilation ir, GmlNaming n)
         {
             w.Lines($$"""
-                var _async_id = async_load[? "id"];
-                var _request = requests[? _async_id];
+                var __async_id__ = async_load[? "id"];
+                var __request__ = requests[? __async_id__];
 
-                if (_request == undefined) {
+                if (is_undefined(__request__)) {
                 	exit;
                 }
 
-                var _status = async_load[? "status"];
+                var __status__ = async_load[? "status"];
 
-                if (_status == 1) exit;
+                // status 1 means "in progress" — wait for the terminal event.
+                if (__status__ == 1) exit;
 
                 if ({{n.Priv}}options_is_debug()) {
-                	var _encoded_async_load = json_encode(async_load);
-                	show_debug_message("HTTP: " + _encoded_async_load);
+                	// async_load is a ds_map, which json_stringify cannot serialise.
+                	show_debug_message("HTTP: " + json_encode(async_load));
                 }
 
-                var _code = async_load[? "http_status"];
-                var _data = async_load[? "result"];
-                var _headers = async_load[? "response_headers"];
+                var __code__ = async_load[? "http_status"];
+                var __data__ = async_load[? "result"];
 
-                if (!is_undefined(_headers)) {
-                	var _set_cookie = string_trim(_headers[$ "Set-Cookie"] ?? "");
-                	if (string_length(_set_cookie) > 0) {
-                		{{n.Priv}}cookie_capture(_set_cookie);
+                // response_headers is a ds_map, not a struct.
+                var __headers__ = async_load[? "response_headers"];
+
+                if (!is_undefined(__headers__) && ds_exists(__headers__, ds_type_map)) {
+                	var __set_cookie__ = string_trim(__headers__[? "Set-Cookie"] ?? "");
+                	if (string_length(__set_cookie__) > 0) {
+                		{{n.Priv}}cookie_capture(__set_cookie__);
                 	}
                 }
 
                 try {
-                	_data = json_parse(_data);
+                	__data__ = json_parse(__data__);
                 }
-                catch(_ex) { /* ignore */ };
+                catch (__ex__) { /* body is not JSON; hand it back untouched */ };
 
-                var _hook = response_hooks[? _code];
-                if (is_callable(_hook) && _hook(_code, _data, _request) == true) {
-                    ds_map_delete(requests, _async_id);
-                	return;
-                }
-
-                var _callback = _request.get_callback();
-                if (is_callable(_callback)) {
-                	_callback(_code, _data, _request);
+                var __hook__ = response_hooks[? __code__];
+                if (is_callable(__hook__) && __hook__(__code__, __data__, __request__) == true) {
+                	ds_map_delete(requests, __async_id__);
+                	exit;
                 }
 
-                ds_map_delete(requests, _async_id);
+                var __callback__ = __request__.get_callback();
+                if (is_callable(__callback__)) {
+                	__callback__(__code__, __data__, __request__);
+                }
+
+                ds_map_delete(requests, __async_id__);
                 """);
         }
 
-        private static void EmitCreateEvent(GmlWriter w, IrWebCompilation ir, GmlNaming n)
+        internal static void EmitCreateEvent(GmlWriter w, IrWebCompilation ir, GmlNaming n)
         {
             w.Lines($$"""
                 /// @ignore
                 type_converters = {};
-                type_converters[$ "*/*"] = function(_i) { return _i; };
-                type_converters[$ "application/json"] = function(_i) {
-                    return json_stringify(_i, false, function(_key, _value) {
-                	    static __strip = function(_key, _value) {
-                		    if (is_undefined(_value)) return;
-                		    self[$ _key] = _value;
+                type_converters[$ "*/*"] = function(__body__) { return __body__; };
+                type_converters[$ "application/json"] = function(__body__) {
+                    // The replacer drops undefined fields so optional properties are omitted
+                    // rather than serialised as null.
+                    return json_stringify(__body__, false, function(__key__, __value__) {
+                	    static __strip__ = function(__k__, __v__) {
+                		    if (is_undefined(__v__)) return;
+                		    self[$ __k__] = __v__;
                 	    }
-                	    if (is_struct(_value)) {
+                	    if (is_struct(__value__)) {
                             with({}) {
-                	            struct_foreach(_value, __strip);
+                	            struct_foreach(__value__, __strip__);
                 	            return self;
                             }
                 	    }
-                	    return _value;
+                	    return __value__;
                     });
                 };
-                type_converters[$ "application/x-www-form-urlencoded"] = function(_i) { return _i; };
-                type_converters[$ "text/plain"] = function(_i) { return string(_i); };
-                type_converters[$ "multipart/form-data"] = function(_i, _header) {
-                    var _boundary = "----Boundary" + string(current_time);
-                    _header[? "Content-Type"] = $"multipart/form-data; boundary={_boundary}";
-                    var _parts = "";
-                    var _keys = struct_get_names(_i);
-                    for (var _j = 0; _j < array_length(_keys); _j++) {
-                        var _k = _keys[_j];
-                        var _v = _i[$ _k];
-                        _parts += $"--{_boundary}\r\nContent-Disposition: form-data; name=\"{_k}\"\r\n\r\n{_v}\r\n";
+                type_converters[$ "application/x-www-form-urlencoded"] = function(__body__) { return __body__; };
+                type_converters[$ "text/plain"] = function(__body__) { return string(__body__); };
+                type_converters[$ "multipart/form-data"] = function(__body__, __header__) {
+                    var __boundary__ = "----Boundary" + string(current_time) + string(irandom(999999));
+                    __header__[? "Content-Type"] = $"multipart/form-data; boundary={__boundary__}";
+                    var __parts__ = "";
+                    var __keys__ = struct_get_names(__body__);
+                    for (var __j__ = 0; __j__ < array_length(__keys__); __j__++) {
+                        var __k__ = __keys__[__j__];
+                        var __v__ = __body__[$ __k__];
+                        if (is_undefined(__v__)) continue;
+                        __parts__ += $"--{__boundary__}\r\nContent-Disposition: form-data; name=\"{__k__}\"";
+                        if (buffer_exists(__v__)) {
+                            // A buffer is binary: interpolating it would write "ref buffer".
+                            __parts__ += $"; filename=\"{__k__}\"\r\nContent-Type: application/octet-stream\r\n";
+                            __parts__ += "Content-Transfer-Encoding: base64\r\n\r\n";
+                            __parts__ += buffer_base64_encode(__v__, 0, buffer_get_size(__v__)) + "\r\n";
+                        } else {
+                            __parts__ += $"\r\n\r\n{__v__}\r\n";
+                        }
                     }
-                    return _parts + $"--{_boundary}--\r\n";
+                    return __parts__ + $"--{__boundary__}--\r\n";
                 };
 
                 auth_tokens = {};

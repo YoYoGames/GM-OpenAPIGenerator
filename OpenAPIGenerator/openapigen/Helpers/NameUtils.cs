@@ -60,20 +60,47 @@ namespace openapigen.Helpers
 
 
 
+        /// <summary>
+        /// True when <paramref name="s"/> can be written as a bare GML identifier. Callers that
+        /// emit a name into code must fall back to accessor syntax — <c>self[$ "end"]</c> for a
+        /// struct member, a quoted key in a struct literal — whenever this returns false.
+        /// </summary>
         public static bool IsValidIdent(string s) => ident.IsMatch(s) && !Reserved.Contains(s);
 
+        /// <summary>
+        /// GML keywords and reserved identifiers. Compared case-insensitively: GML keywords are
+        /// lowercase, but escaping a differently-cased match is harmless while missing one emits
+        /// code that does not compile.
+        /// </summary>
         public static readonly HashSet<string> Reserved = new(StringComparer.OrdinalIgnoreCase)
         {
-            // Keywords
-            "if","else","do","while","for","switch","case","break","continue","return","exit",
-            "repeat","until","var","globalvar","static","enum","try","catch","finally","with",
-            "function","new","delete","begin","end","method",
+            // Control flow
+            "if","then","else","do","while","for","switch","case","default","break","continue",
+            "return","exit","repeat","until","with",
 
-            // Constants
-            "true","false","undefined","infinity","pi",
+            // Declarations
+            "var","globalvar","static","enum","function","constructor","method","new","delete",
+            "begin","end",
 
-            // Globals
-            "global","score", "room",
+            // Exceptions
+            "try","catch","finally","throw",
+
+            // Word operators
+            "and","or","not","xor","div","mod",
+
+            // Scope / instance keywords
+            "self","other","all","noone","global","local",
+
+            // Literals and constants
+            "true","false","undefined","infinity","pi","nan",
+
+            // Argument access
+            "argument","argument_count","argument0","argument1","argument2","argument3",
+            "argument4","argument5","argument6","argument7","argument8","argument9",
+            "argument10","argument11","argument12","argument13","argument14","argument15",
+
+            // Built-in variables that are not writable as plain struct members
+            "score","room","async_load","event_data",
         };
 
 

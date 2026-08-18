@@ -11,104 +11,85 @@ namespace openapigen.Emitters.Gml
     {
         private static readonly Regex PathVar = new(@"\{([^}]+)\}", RegexOptions.Compiled);
 
+        // Generator-owned temporaries use __name__ so a spec parameter can never shadow them.
         private const string BaseUrlVar = "__base_url__";
         private const string UrlVar = "__url__";
         private const string ContentTypeVar = "__content_type__";
         private const string SecurityVar = "__security__";
+        private const string ParamsVar = "__params__";
+        private const string HeadersVar = "__headers__";
+        private const string WhereVar = "__where__";
 
         public static void Emit(IrHttpEndpoint ep, IrWebCompilation compilation, GmlWriter w, GmlNaming n)
         {
             var resolver = new SchemaResolver(compilation);
-
-            var ordered = ep.Parameters.Where(p => p.Location != IrLocation.Cookie).OrderByDescending(p => p.Required).ToList();
-            var sig = ordered.Select(p => p.Required
-                    ? NameUtils.ParamName(p.Name)
-                    : $"{NameUtils.ParamName(p.Name)} = undefined")
-                .ToList();
-
-            bool needsBody = ep.Body is not null;
-            bool ctChoice = needsBody && ep.Body!.MediaTypes.Length > 1;
-
-            if (needsBody) sig.Add("_body = undefined");
-            if (ctChoice) sig.Add($"_content_type = \"{ep.Body!.MediaTypes[0]}\"");
-            sig.Add("_callback = undefined");
+            var args = EndpointSignature.Build(ep);
+            var sig = EndpointSignature.ToGmlParameters(args);
 
             var fnName = $"{n.Pub}{ep.Name}";
 
-            // JSDoc (keep it simple; schema jsdoc can be improved later)
+            var body = args.FirstOrDefault(a => a.Kind == EndpointArgKind.Body);
+            var contentType = args.FirstOrDefault(a => a.Kind == EndpointArgKind.ContentType);
+
             w.JsDoc(js =>
             {
-                js.Line($"@func {fnName}()");
-                if (!string.IsNullOrEmpty(ep.Description)) js.Description(ep.Description);
+                js.Line($"@func {fnName}({string.Join(", ", sig)})");
 
-                foreach (var p in ordered)
-                    js.Param(new ParamDoc(NameUtils.ParamName(p.Name), "Any", p.Description));
+                var summary = ep.Description ?? ep.Summary;
+                if (!string.IsNullOrEmpty(summary)) js.Description(summary);
 
-                if (needsBody)
-                    js.Param(new ParamDoc("_body", "Any", "Request body.", true));
-
-                if (ctChoice)
-                    js.Param(new ParamDoc("_content_type", "String", "Selected content type.", true));
-
-                js.Param(new ParamDoc("_callback", "Function", "Callback (status, data, request).", true));
+                foreach (var a in args)
+                {
+                    var type = a.Schema is null ? "Any" : SchemaJsDoc.ToJsDoc(a.Schema, n, resolver);
+                    var name = a.Required && a.Kind == EndpointArgKind.Parameter ? a.Name : $"[{a.Name}]";
+                    js.Param(new ParamDoc(name, type, a.Description));
+                }
             });
 
             w.Function(fnName, sig, fn =>
             {
-                // base url
-                fn.Assign(BaseUrlVar, $"{n.Priv}options_get_rest_url()", VariableScope.Static).Line();
+                fn.Assign(BaseUrlVar, $"{n.Priv}options_get_rest_url()", VariableScope.Local).Line();
 
-                // content type
                 var ctExpr = "undefined";
-                if (needsBody)
+                if (body is not null)
                 {
                     ctExpr = ContentTypeVar;
 
-                    if (!ctChoice)
-                        fn.Assign(ContentTypeVar, $"\"{ep.Body!.MediaTypes[0]}\"", VariableScope.Static).Line();
+                    if (contentType is null)
+                        fn.Assign(ContentTypeVar, $"\"{ep.Body!.MediaTypes[0]}\"", VariableScope.Local).Line();
                     else
-                        fn.Assign(ContentTypeVar, "_content_type").Line();
+                        fn.Assign(ContentTypeVar, EndpointSignature.ContentTypeArg, VariableScope.Local).Line();
                 }
 
-                // validation (THROW-based)
                 fn.Comment("argument validation");
-                fn.Assign("_where", "_GMFUNCTION_", VariableScope.Local).Line();
+                fn.Assign(WhereVar, "_GMFUNCTION_", VariableScope.Local).Line();
 
-                foreach (var p in ordered)
+                foreach (var a in args)
                 {
-                    var id = NameUtils.ParamName(p.Name);
-                    ValueSchemaValidatorEmitter.Emit(fn, id, p.Schema, p.Required, resolver, n, "_where", p.Name);
+                    if (a.Schema is null) continue;
+
+                    // The content-type is validated through its temporary, which is what the rest
+                    // of the body path uses.
+                    var expr = a.Kind == EndpointArgKind.ContentType ? ContentTypeVar : a.Name;
+
+                    // An argument with a default is never actually absent, but validating it as
+                    // optional keeps an explicit `undefined` from throwing.
+                    var required = a.Required && a.DefaultLiteral is null;
+
+                    ValueSchemaValidatorEmitter.Emit(fn, expr, a.Schema, required, resolver, n, WhereVar, a.SpecName);
                 }
-
-                if (needsBody)
-                    ValueSchemaValidatorEmitter.Emit(fn, "_body", ep.Body!.Schema, required: ep.Body.Required, resolver, n, "_where", "_body");
-
-                if (ctChoice)
-                    ValueSchemaValidatorEmitter.Emit(fn, ctExpr, new IrValueSchema.Simple(IrType.String), required: false, resolver, n, "_where", "_content_type");
-
-                // callback optional
-                ValueSchemaValidatorEmitter.Emit(fn, "_callback", new IrValueSchema.Simple(IrType.Function), required: false, resolver, n, "_where", "_callback");
 
                 fn.Line();
 
-                // URL
                 fn.Comment("build url path");
-                fn.Assign(UrlVar, $"$\"{{{BaseUrlVar}}}{CleanPath(ep)}\"", VariableScope.Local).Line();
+                fn.Assign(UrlVar, $"$\"{{{BaseUrlVar}}}{CleanPath(ep, args, n)}\"", VariableScope.Local).Line();
 
-                // query params
-                var qs = ep.Parameters.Where(p => p.Location == IrLocation.Query).ToList();
-                var paramExpr = qs.Count == 0 ? "undefined" : "_params";
-                if (qs.Count > 0)
-                {
-                    fn.Comment("create query params struct");
-                    fn.Assign(paramExpr, "{ " + string.Join(", ", qs.Select(p => $"{p.Name} : {NameUtils.ParamName(p.Name)}")) + " }", VariableScope.Local).Line();
-                }
+                var paramExpr = EmitStructArg(fn, args, IrLocation.Query, ParamsVar, "create query params struct");
+                var headerExpr = EmitStructArg(fn, args, IrLocation.Header, HeadersVar, "create header params struct");
 
                 var secExpr = BuildSecurityExpr(ep.Auth);
                 if (secExpr != "undefined")
-                {
                     fn.Assign(SecurityVar, secExpr, VariableScope.Local).Line();
-                }
 
                 var secArg = secExpr == "undefined" ? "undefined" : SecurityVar;
 
@@ -117,18 +98,61 @@ namespace openapigen.Emitters.Gml
                     UrlVar,
                     paramExpr,
                     $"\"{ep.Verb}\"",
-                    needsBody ? "_body" : "undefined",
+                    headerExpr,
+                    body is not null ? EndpointSignature.BodyArg : "undefined",
                     ctExpr,
                     secArg,
                     "undefined",
-                    "_callback",
+                    EndpointSignature.CallbackArg,
                     "_GMFUNCTION_"
                 }));
             }).Line();
         }
 
-        private static string CleanPath(IrHttpEndpoint ep) =>
-            PathVar.Replace(ep.PathTemplate, m => $"{{{NameUtils.ParamName(m.Groups[1].Value)}}}");
+        /// <summary>
+        /// Emits a struct literal collecting all arguments at one location, or returns "undefined"
+        /// when there are none. Keys that are not valid GML identifiers are quoted.
+        /// </summary>
+        private static string EmitStructArg(
+            GmlWriter fn,
+            IReadOnlyList<EndpointArg> args,
+            IrLocation location,
+            string varName,
+            string comment)
+        {
+            var matching = args.Where(a => a.Location == location).ToList();
+            if (matching.Count == 0)
+                return "undefined";
+
+            var entries = matching.Select(a => $"{StructKey(a.SpecName)} : {a.Name}");
+
+            fn.Comment(comment);
+            fn.Assign(varName, "{ " + string.Join(", ", entries) + " }", VariableScope.Local).Line();
+
+            return varName;
+        }
+
+        /// <summary>
+        /// A struct-literal key must be a bare identifier or a quoted string; header names such as
+        /// "X-Trace" and query keys such as "filter[id]" are only legal in quoted form.
+        /// </summary>
+        private static string StructKey(string name) =>
+            NameUtils.IsValidIdent(name) ? name : $"\"{name.Replace("\"", "\\\"")}\"";
+
+        /// <summary>
+        /// Substitutes path placeholders with their GML arguments, URL-encoding each value.
+        /// </summary>
+        private static string CleanPath(IrHttpEndpoint ep, IReadOnlyList<EndpointArg> args, GmlNaming n) =>
+            PathVar.Replace(ep.PathTemplate, m =>
+            {
+                var specName = m.Groups[1].Value;
+                var arg = args.FirstOrDefault(a =>
+                    a.Location == IrLocation.Path &&
+                    string.Equals(a.SpecName, specName, StringComparison.Ordinal));
+
+                var expr = arg?.Name ?? NameUtils.ParamName(specName);
+                return $"{{{n.Priv}url_encode({expr})}}";
+            });
 
         private static string BuildSecurityExpr(IrAuthPolicy policy)
         {

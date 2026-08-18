@@ -1,12 +1,16 @@
 using codegencore.Model;
-using codegencore.Writers;
 using codegencore.Writers.Lang;
-using openapigen.Helpers;
 using openapigen.Model;
 using System.Collections.Immutable;
 
 namespace openapigen.Helpers
 {
+    /// <summary>
+    /// Emits runtime type checks for a value against an IR schema.
+    ///
+    /// This is the single validator emitter: struct fields and endpoint arguments both come through
+    /// here, so a given schema is always checked the same way.
+    /// </summary>
     internal static class ValueSchemaValidatorEmitter
     {
         public static void Emit(
@@ -16,21 +20,19 @@ namespace openapigen.Helpers
             bool required,
             SchemaResolver resolver,
             GmlNaming n,
-            string whereVar = "_where",
+            string whereVar = "__where__",
             string? displayName = null)
         {
             var name = displayName is null ? expr : $"'{displayName}'";
 
-            if (!required)
+            if (required)
             {
-                w.If($"!is_undefined({expr})", body =>
-                {
-                    EmitRequired(body, expr, schema, resolver, n, whereVar, name);
-                });
+                EmitRequired(w, expr, schema, resolver, n, whereVar, name, depth: 0);
                 return;
             }
 
-            EmitRequired(w, expr, schema, resolver, n, whereVar, name);
+            w.If($"!is_undefined({expr})", body =>
+                EmitRequired(body, expr, schema, resolver, n, whereVar, name, depth: 0));
         }
 
         private static void EmitRequired(
@@ -40,28 +42,26 @@ namespace openapigen.Helpers
             SchemaResolver resolver,
             GmlNaming n,
             string whereVar,
-            string nameForError)
+            string nameForError,
+            int depth)
         {
-            switch (schema)
+            switch (resolver.Unalias(schema))
             {
                 case IrValueSchema.Simple s:
-                    EmitTypeOrNamedSchema(w, expr, s.Type, resolver, n, whereVar, nameForError);
+                    EmitTypeOrNamedSchema(w, expr, s.Type, resolver, n, whereVar, nameForError, depth);
                     return;
 
                 case IrValueSchema.AllOf all:
                     foreach (var part in all.Parts)
-                        EmitRequired(w, expr, part, resolver, n, whereVar, nameForError);
+                        EmitRequired(w, expr, part, resolver, n, whereVar, nameForError, depth);
                     return;
 
                 case IrValueSchema.AnyOf any:
-                    EmitTryMany(w, expr, any.Options, resolver, n, whereVar, nameForError, exactOne: false);
+                    EmitTryMany(w, expr, any.Options, resolver, n, whereVar, nameForError, exactOne: false, depth);
                     return;
 
                 case IrValueSchema.OneOf one:
-                    EmitTryMany(w, expr, one.Options, resolver, n, whereVar, nameForError, exactOne: true);
-                    return;
-
-                default:
+                    EmitTryMany(w, expr, one.Options, resolver, n, whereVar, nameForError, exactOne: true, depth);
                     return;
             }
         }
@@ -73,16 +73,16 @@ namespace openapigen.Helpers
             SchemaResolver resolver,
             GmlNaming n,
             string whereVar,
-            string nameForError)
+            string nameForError,
+            int depth)
         {
-            // Nullable: let caller decide undefined semantics; validate underlying if present
+            // Nullable: the caller's required/optional handling decides undefined; check the payload.
             if (type is IrType.Nullable nn)
             {
-                EmitTypeOrNamedSchema(w, expr, nn.Underlying, resolver, n, whereVar, nameForError);
+                EmitTypeOrNamedSchema(w, expr, nn.Underlying, resolver, n, whereVar, nameForError, depth);
                 return;
             }
 
-            // Arrays
             if (type is IrType.Array arr)
             {
                 var pred = arr.FixedLength is null
@@ -90,97 +90,75 @@ namespace openapigen.Helpers
                     : $"(!is_array({expr}) || array_length({expr}) != {arr.FixedLength.Value})";
 
                 w.Line($"if ({pred}) throw $\"{{{whereVar}}} :: {San(nameForError)} expected {DisplayType(type, n)}\";");
-
-                // Optional: validate elements (expensive; leave off unless you want it)
-                // for (var i=0; i<array_length(expr); i++) validate elem...
                 return;
             }
 
-            // Named schema
             if (type is IrType.Named named)
             {
-                EmitNamedSchemaValidation(w, expr, named.Name, resolver, n, whereVar, nameForError);
+                EmitNamedSchemaValidation(w, expr, named, resolver, n, whereVar, nameForError);
                 return;
             }
 
-            // Builtin
             var pred2 = PredicateForBuiltin(expr, type);
             if (!string.IsNullOrEmpty(pred2))
                 w.Line($"if ({pred2}) throw $\"{{{whereVar}}} :: {San(nameForError)} expected {DisplayType(type, n)}\";");
         }
 
+        /// <summary>
+        /// Every declared schema gets its own <c>&lt;Type&gt;_validate</c> function, so a named type
+        /// is validated by calling it. That keeps the emitted code small and makes recursive schemas
+        /// work — the recursion happens at runtime, not during emission.
+        /// </summary>
         private static void EmitNamedSchemaValidation(
             GmlWriter w,
             string expr,
-            string schemaName,
+            IrType.Named named,
             SchemaResolver resolver,
             GmlNaming n,
             string whereVar,
             string nameForError)
         {
-            // If we don't know the schema, accept (or throw). Pragmatic: accept.
-            if (!resolver.TryGet(schemaName, out var decl))
+            // Unknown schema: nothing to check against, so accept.
+            if (!resolver.TryGet(named.Name, out _))
                 return;
 
-            switch (decl)
-            {
-                case IrSchema.Struct:
-                    // Only structs get global validators in your plan
-                    w.Line($"{n.StructPrefix}{schemaName}_validate({expr}, {whereVar});");
-                    return;
-
-                case IrSchema.Enum en:
-                    // Inline enum validation (strings only per your decision)
-                    w.Line($"if (!is_string({expr})) throw $\"{{{whereVar}}} :: {San(nameForError)} expected String\";");
-                    w.Line("switch (" + expr + ")");
-                    w.Line("{");
-                    w.Indent();
-                    foreach (var lit in en.Literals)
-                    {
-                        var s = (lit ?? "").Replace("\"", "\\\"");
-                        w.Line($"case \"{s}\": break;");
-                    }
-                    w.Line("default:");
-                    w.Indent();
-                    w.Line($"throw $\"{{{whereVar}}} :: {San(nameForError)} invalid {schemaName} '{{{expr}}}'\";");
-                    w.Unindent();
-                    w.Unindent();
-                    w.Line("}");
-                    return;
-
-                case IrSchema.Alias a:
-                    EmitRequired(w, expr, a.Schema, resolver, n, whereVar, nameForError);
-                    return;
-
-                case IrSchema.OneOf o:
-                    EmitTryMany(w, expr, o.Schema is IrValueSchema.OneOf ov ? ov.Options : o.Schema switch
-                    {
-                        IrValueSchema.OneOf ov2 => ov2.Options,
-                        _ => []
-                    }, resolver, n, whereVar, nameForError, exactOne: true);
-                    return;
-
-                case IrSchema.AnyOf a2:
-                    EmitTryMany(w, expr, a2.Schema is IrValueSchema.AnyOf av ? av.Options : a2.Schema switch
-                    {
-                        IrValueSchema.AnyOf av2 => av2.Options,
-                        _ => []
-                    }, resolver, n, whereVar, nameForError, exactOne: false);
-                    return;
-
-                case IrSchema.AllOf all:
-                    if (all.Schema is IrValueSchema.AllOf parts)
-                    {
-                        foreach (var p in parts.Parts)
-                            EmitRequired(w, expr, p, resolver, n, whereVar, nameForError);
-                    }
-                    return;
-
-                default:
-                    return;
-            }
+            w.Line($"{n.StructPrefix}{named.Name}_validate({expr}, {whereVar});");
         }
 
+        /// <summary>Emits an is-string check plus a switch over the enum's literals.</summary>
+        public static void EmitEnumCheck(
+            GmlWriter w,
+            string expr,
+            IrSchema.Enum en,
+            string whereVar,
+            string nameForError)
+        {
+            var pred = PredicateForBuiltin(expr, en.Underlying);
+            if (!string.IsNullOrEmpty(pred))
+                w.Line($"if ({pred}) throw $\"{{{whereVar}}} :: {San(nameForError)} expected {DisplayType(en.Underlying, new GmlNaming())}\";");
+
+            if (en.Literals.Length == 0)
+                return;
+
+            var isString = en.Underlying is IrType.Builtin { Kind: BuiltinKind.String };
+
+            w.Switch(expr, sw =>
+            {
+                foreach (var lit in en.Literals)
+                {
+                    var label = isString ? $"\"{(lit ?? "").Replace("\"", "\\\"")}\"" : lit ?? "0";
+                    sw.Case(label, _ => { });
+                }
+
+                sw.Default(d =>
+                    d.Line($"throw $\"{{{whereVar}}} :: {San(nameForError)} invalid {en.Name} '{{{expr}}}'\";"));
+            });
+        }
+
+        /// <summary>
+        /// oneOf / anyOf: try each option and count the successes. The counter is depth-suffixed so
+        /// nested compositions do not redeclare the same local.
+        /// </summary>
         private static void EmitTryMany(
             GmlWriter w,
             string expr,
@@ -189,21 +167,25 @@ namespace openapigen.Helpers
             GmlNaming n,
             string whereVar,
             string nameForError,
-            bool exactOne)
+            bool exactOne,
+            int depth)
         {
-            w.Line("var __ok = 0;");
-            for (int i = 0; i < options.Length; i++)
+            var ok = $"__ok_{depth}__";
+
+            w.Assign(ok, "0", VariableScope.Local);
+
+            foreach (var option in options)
             {
-                w.Line("try").Block(b => {
-                    EmitRequired(b, expr, options[i], resolver, n, whereVar, nameForError);
-                    b.Line("__ok += 1;");
-                }).Line(" catch (__e) { }");
+                w.Line("try").Block(body =>
+                {
+                    EmitRequired(body, expr, option, resolver, n, whereVar, nameForError, depth + 1);
+                    body.Line($"{ok} += 1;");
+                }).Line($" catch (__e_{depth}__) {{ }}");
             }
 
-            if (exactOne)
-                w.Line($"if (__ok != 1) throw $\"{{{whereVar}}} :: {San(nameForError)} expected oneOf\";");
-            else
-                w.Line($"if (__ok < 1) throw $\"{{{whereVar}}} :: {San(nameForError)} expected anyOf\";");
+            var failed = exactOne ? $"{ok} != 1" : $"{ok} < 1";
+            var kind = exactOne ? "oneOf" : "anyOf";
+            w.Line($"if ({failed}) throw $\"{{{whereVar}}} :: {San(nameForError)} expected {kind}\";");
         }
 
         private static string PredicateForBuiltin(string expr, IrType t)
@@ -221,13 +203,15 @@ namespace openapigen.Helpers
                 BuiltinKind.Int64 or BuiltinKind.UInt64 or
                 BuiltinKind.Float32 or BuiltinKind.Float64 => $"!is_real({expr})",
 
-                // bytes => expect buffer id (real)
-                BuiltinKind.Buffer => $"!is_real({expr})",
+                // A GML buffer is a handle; buffer_exists is the only meaningful runtime check.
+                BuiltinKind.Buffer => $"!buffer_exists({expr})",
 
                 BuiltinKind.Function => $"!is_callable({expr})",
 
-                BuiltinKind.Any or BuiltinKind.AnyArray or BuiltinKind.AnyMap => string.Empty,
-                BuiltinKind.Void => string.Empty,
+                BuiltinKind.AnyArray => $"!is_array({expr})",
+                BuiltinKind.AnyMap => $"!is_struct({expr})",
+
+                BuiltinKind.Any or BuiltinKind.Void => string.Empty,
 
                 _ => string.Empty
             };
@@ -238,7 +222,7 @@ namespace openapigen.Helpers
             return t switch
             {
                 IrType.Nullable nn => DisplayType(nn.Underlying, n),
-                IrType.Array a => "Array",
+                IrType.Array a => $"Array<{DisplayType(a.Element, n)}>",
                 IrType.Named named => $"{n.StructPrefix}{named.Name}",
 
                 IrType.Builtin b => b.Kind switch

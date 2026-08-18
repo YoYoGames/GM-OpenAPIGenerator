@@ -1,3 +1,4 @@
+using openapigen.Models.Config;
 using System.Text;
 using System.Text.Json;
 
@@ -20,7 +21,12 @@ namespace openapigen.Config
 
                 _ = _schema.WriteSchemaBesideConfig<OpenApiGenConfig>(configPath, schemaFileName);
 
-                var cfg = new OpenApiGenConfig { Schema = $"./{schemaFileName}" };
+                var cfg = new OpenApiGenConfig
+                {
+                    Schema = $"./{schemaFileName}",
+                    Root = "./"
+                };
+
                 var json = JsonSerializer.Serialize(cfg, _jsonOptions);
                 File.WriteAllText(configPath, json, new UTF8Encoding(false));
 

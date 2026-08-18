@@ -11,6 +11,8 @@ namespace openapigen.Emitters.Gml
         {
             EmitOptions(w, n);
             w.Line();
+            EmitUrlEncode(w, n);
+            w.Line();
             EmitUtils(w, ir, n);
             w.Line();
             EmitRequest(w, ir, n);
@@ -18,18 +20,59 @@ namespace openapigen.Emitters.Gml
 
         private static void EmitOptions(GmlWriter w, GmlNaming n)
         {
+            // Read per call: caching in a static would pin the URL for the whole session, so a game
+            // that switches environment at runtime could never change it.
             w.JsDoc(b => b.Returns("String"))
              .Function($"{n.Priv}options_get_rest_url", [], fn =>
              {
-                 fn.Assign("_url", $"extension_get_option_value(\"{n.StructPrefix}\", \"server_rest_url\")", VariableScope.Static)
-                   .Return("_url");
+                 fn.Return($"extension_get_option_value(\"{n.StructPrefix}\", \"server_rest_url\")");
              }).Line();
 
             w.JsDoc(b => b.Returns("Bool"))
              .Function($"{n.Priv}options_is_debug", [], fn =>
              {
-                 fn.Assign("_enabled", $"bool(extension_get_option_value(\"{n.StructPrefix}\", \"debug_logging\"))", VariableScope.Static)
-                   .Return("_enabled");
+                 fn.Return($"bool(extension_get_option_value(\"{n.StructPrefix}\", \"debug_logging\"))");
+             }).Line();
+        }
+
+        /// <summary>
+        /// Percent-encodes a value for use in a URL path segment or query value. Unreserved
+        /// characters (RFC 3986 2.3) pass through; everything else is encoded from its UTF-8 bytes.
+        /// </summary>
+        private static void EmitUrlEncode(GmlWriter w, GmlNaming n)
+        {
+            w.JsDoc(b => b
+                    .Param(new ParamDoc("__value__", "Any", "Value to percent-encode."))
+                    .Returns("String")
+                    .Tag("ignore"))
+             .Function($"{n.Priv}url_encode", ["__value__"], fn =>
+             {
+                 fn.If("is_undefined(__value__)", ifBody => ifBody.Return("\"\"")).Line();
+
+                 fn.Assign("__text__", "string(__value__)", VariableScope.Local);
+                 fn.Assign("__buffer__", "buffer_create(string_byte_length(__text__) + 1, buffer_fixed, 1)", VariableScope.Local);
+                 fn.Line("buffer_write(__buffer__, buffer_text, __text__);");
+                 fn.Assign("__size__", "buffer_tell(__buffer__)", VariableScope.Local);
+                 fn.Assign("__out__", "\"\"", VariableScope.Local).Line();
+
+                 fn.For("var __i__ = 0", "__i__ < __size__", "__i__++", loop =>
+                 {
+                     loop.Assign("__byte__", "buffer_peek(__buffer__, __i__, buffer_u8)", VariableScope.Local);
+                     loop.If(
+                         "(__byte__ >= 48 && __byte__ <= 57) || (__byte__ >= 65 && __byte__ <= 90) " +
+                         "|| (__byte__ >= 97 && __byte__ <= 122) || __byte__ == 45 || __byte__ == 46 " +
+                         "|| __byte__ == 95 || __byte__ == 126",
+                         ifBody => ifBody.Line("__out__ += chr(__byte__);"),
+                         elseBody =>
+                         {
+                             elseBody.Assign("__hex__", "\"0123456789ABCDEF\"", VariableScope.Local);
+                             elseBody.Line("__out__ += \"%\" + string_char_at(__hex__, (__byte__ >> 4) + 1) " +
+                                           "+ string_char_at(__hex__, (__byte__ & 15) + 1);");
+                         });
+                 }).Line();
+
+                 fn.Line("buffer_delete(__buffer__);");
+                 fn.Return("__out__");
              }).Line();
         }
 
@@ -38,14 +81,14 @@ namespace openapigen.Emitters.Gml
             var schemeList = string.Join(", ", ir.AuthSchemes.Select(s => $"\"{s.Name}\""));
 
             w.JsDoc(b => b
-                .Param(new ParamDoc("_where", "String", "Caller location for error messages."))
+                .Param(new ParamDoc("__where__", "String", "Caller location for error messages."))
                 .Returns("Id.Instance")
                 .Tag("ignore"))
-             .Function($"{n.Priv}get_singleton", ["_where"], fn =>
+             .Function($"{n.Priv}get_singleton", ["__where__"], fn =>
              {
-                 fn.Assign("instance", $"instance_create_depth(0, 0, 0, obj{n.Priv}core)", VariableScope.Static);
-                 fn.With("instance", inner => inner.Return("self"));
-                 fn.Line($"show_error($\"{{_where}} :: Failed to get the obj{n.Priv}core singleton.\", true);");
+                 fn.Assign("__singleton__", $"instance_create_depth(0, 0, 0, obj{n.Priv}core)", VariableScope.Static);
+                 fn.With("__singleton__", inner => inner.Return("self"));
+                 fn.Line($"show_error($\"{{__where__}} :: Failed to get the obj{n.Priv}core singleton.\", true);");
              }).Line();
 
             w.JsDoc(b => b
@@ -53,8 +96,8 @@ namespace openapigen.Emitters.Gml
                 .Param(new ParamDoc("_token", "String", null)))
              .Function($"{n.Pub}request_auth_set_token", ["_token_id", "_token"], fn =>
              {
-                 fn.Assign("_instance", $"{n.Priv}get_singleton(_GMFUNCTION_)", VariableScope.Local)
-                   .Assign(w => w.Access("_instance.auth_tokens", AccessorKind.Struct, "_token_id"), "_token");
+                 fn.Assign("__instance__", $"{n.Priv}get_singleton(_GMFUNCTION_)", VariableScope.Local)
+                   .Assign(w => w.Access("__instance__.auth_tokens", AccessorKind.Struct, "_token_id"), "_token");
              }).Line();
 
             w.JsDoc(b => b
@@ -62,8 +105,8 @@ namespace openapigen.Emitters.Gml
                 .Returns("String"))
              .Function($"{n.Priv}request_auth_get_token", ["_token_id"], fn =>
              {
-                 fn.Assign("_instance", $"{n.Priv}get_singleton(_GMFUNCTION_)", VariableScope.Local)
-                   .Return(r => r.Access("_instance.auth_tokens", AccessorKind.Struct, "_token_id"));
+                 fn.Assign("__instance__", $"{n.Priv}get_singleton(_GMFUNCTION_)", VariableScope.Local)
+                   .Return(r => r.Access("__instance__.auth_tokens", AccessorKind.Struct, "_token_id"));
              }).Line();
 
             w.JsDoc(b => b
@@ -71,8 +114,8 @@ namespace openapigen.Emitters.Gml
                 .Param(new ParamDoc("_function", "Function", "function(_body, _header_ds_map) → String|Id.Buffer")))
              .Function($"{n.Pub}request_body_set_converter", ["_content_type", "_function"], fn =>
              {
-                 fn.Assign("_instance", $"{n.Priv}get_singleton(_GMFUNCTION_)", VariableScope.Local)
-                   .Assign(w => w.Access("_instance.type_converters", AccessorKind.Struct, "_content_type"), "_function");
+                 fn.Assign("__instance__", $"{n.Priv}get_singleton(_GMFUNCTION_)", VariableScope.Local)
+                   .Assign(w => w.Access("__instance__.type_converters", AccessorKind.Struct, "_content_type"), "_function");
              }).Line();
 
             w.JsDoc(b => b
@@ -80,8 +123,8 @@ namespace openapigen.Emitters.Gml
                 .Returns("Function"))
              .Function($"{n.Priv}request_body_get_converter", ["_content_type"], fn =>
              {
-                 fn.Assign("_instance", $"{n.Priv}get_singleton(_GMFUNCTION_)", VariableScope.Local)
-                   .Return(r => r.Access("_instance.type_converters", AccessorKind.Struct, "_content_type"));
+                 fn.Assign("__instance__", $"{n.Priv}get_singleton(_GMFUNCTION_)", VariableScope.Local)
+                   .Return(r => r.Access("__instance__.type_converters", AccessorKind.Struct, "_content_type"));
              }).Line();
 
             w.JsDoc(b => b
@@ -89,8 +132,8 @@ namespace openapigen.Emitters.Gml
                 .Param(new ParamDoc("_hook", "Function", null)))
              .Function($"{n.Pub}request_response_set_hook", ["_code", "_hook"], fn =>
              {
-                 fn.Assign("_instance", $"{n.Priv}get_singleton(_GMFUNCTION_)", VariableScope.Local)
-                   .Assign(w => w.Access("_instance.response_hooks", AccessorKind.Map, "_code"), "_hook");
+                 fn.Assign("__instance__", $"{n.Priv}get_singleton(_GMFUNCTION_)", VariableScope.Local)
+                   .Assign(w => w.Access("__instance__.response_hooks", AccessorKind.Map, "_code"), "_hook");
              }).Line();
 
             w.JsDoc(b => b
@@ -98,8 +141,8 @@ namespace openapigen.Emitters.Gml
                 .Returns("Function"))
              .Function($"{n.Priv}request_response_get_hook", ["_code"], fn =>
              {
-                 fn.Assign("_instance", $"{n.Priv}get_singleton(_GMFUNCTION_)", VariableScope.Local)
-                   .Return(r => r.Access("_instance.response_hooks", AccessorKind.Map, "_code"));
+                 fn.Assign("__instance__", $"{n.Priv}get_singleton(_GMFUNCTION_)", VariableScope.Local)
+                   .Return(r => r.Access("__instance__.response_hooks", AccessorKind.Map, "_code"));
              }).Line();
         }
 
@@ -109,26 +152,28 @@ namespace openapigen.Emitters.Gml
                 .Param(new ParamDoc("_url",          "String",           null))
                 .Param(new ParamDoc("_params",        "Struct|Undefined", null))
                 .Param(new ParamDoc("_method",        "String",           null))
+                .Param(new ParamDoc("_headers",       "Struct|Undefined", "Per-request header parameters from the spec."))
                 .Param(new ParamDoc("_body",          "Any",              null))
                 .Param(new ParamDoc("_content_type",  "String|Undefined", null))
                 .Param(new ParamDoc("_security",      "Array|Undefined",  null))
                 .Param(new ParamDoc("_cookies",       "Struct|Undefined", "Per-request cookies merged with the cookie jar on send."))
                 .Param(new ParamDoc("_callback",      "Function",         null))
-                .Param(new ParamDoc("_where",         "String",           null)))
+                .Param(new ParamDoc("__where__",         "String",           null)))
              .Struct($"{n.StructPrefix}Request",
-                ["_url", "_params", "_method", "_body", "_content_type", "_security", "_cookies", "_callback", "_where"],
+                ["_url", "_params", "_method", "_headers", "_body", "_content_type", "_security", "_cookies", "_callback", "__where__"],
                 body =>
                 {
                     body.Assign("__", w => w.StructLiteral([
                         new("url",          "_url"),
                         new("params",       "_params"),
                         new("http_method",  "_method"),
+                        new("headers",      "_headers"),
                         new("content_type", "_content_type"),
                         new("raw_body",     "undefined"),
                         new("callback",     "_callback"),
                         new("security",     "_security"),
                         new("cookies",      "_cookies"),
-                        new("where",        "_where"),
+                        new("where",        "__where__"),
                     ], multiline: true)).Line();
 
                     body.Assign("attempts", "0").Line();
@@ -142,66 +187,82 @@ namespace openapigen.Emitters.Gml
                     body.JsDoc(b => b.Returns("Real"))
                         .Assign("send", w => w.Method([], fn =>
                         {
-                            fn.Assign("_id",   "-1",   VariableScope.Local)
-                              .Assign("_self", "self", VariableScope.Local);
+                            fn.Assign("__id__",   "-1",   VariableScope.Local)
+                              .Assign("__self__", "self", VariableScope.Local);
 
                             fn.With("__", inner =>
                             {
-                                inner.Assign("_params", "params ?? {}", VariableScope.Local)
-                                     .Assign("_header", "ds_map_create()", VariableScope.Local).Line();
+                                inner.Assign("__params__", "params ?? {}", VariableScope.Local)
+                                     .Assign("__header__", "ds_map_create()", VariableScope.Local).Line();
+
+                                // Endpoint header parameters go in first so authentication, which
+                                // the caller does not control, always wins on a name clash.
+                                inner.Comment("endpoint header parameters");
+                                inner.If("!is_undefined(headers)", ifBody =>
+                                {
+                                    ifBody.Assign("__header_keys__", "struct_get_names(headers)", VariableScope.Local);
+                                    ifBody.Assign("__header_count__", "array_length(__header_keys__)", VariableScope.Local);
+                                    ifBody.For("var __i__ = 0", "__i__ < __header_count__", "__i__++", loop =>
+                                    {
+                                        loop.Assign("__k__", "__header_keys__[__i__]", VariableScope.Local);
+                                        loop.Assign("__v__", "headers[$ __k__]", VariableScope.Local);
+                                        loop.If("!is_undefined(__v__)", set =>
+                                            set.Line("__header__[? __k__] = string(__v__);"));
+                                    });
+                                }).Line();
 
                                 inner.Comment("inject security");
-                                inner.Assign("_sec_count", "is_array(security) ? array_length(security) : 0", VariableScope.Local);
-                                inner.For("var _i = 0", "_i < _sec_count", "_i++", loop =>
-                                    loop.Line($"_self._apply_auth(_header, _params, security[_i], where);")).Line();
+                                inner.Assign("__sec_count__", "is_array(security) ? array_length(security) : 0", VariableScope.Local);
+                                inner.For("var __i__ = 0", "__i__ < __sec_count__", "__i__++", loop =>
+                                    loop.Line($"__self__._apply_auth(__header__, __params__, security[__i__], where);")).Line();
 
-                                inner.Assign("_instance", $"{n.Priv}get_singleton(where)", VariableScope.Local).Line();
+                                inner.Assign("__instance__", $"{n.Priv}get_singleton(where)", VariableScope.Local).Line();
 
                                 inner.Comment("cookies: jar entries first, then per-request overrides");
-                                inner.Assign("_cookie_parts", "[]",              VariableScope.Local)
-                                     .Assign("_j",            "0",              VariableScope.Local)
-                                     .Assign("_jar_keys",   "struct_get_names(_instance.cookie_jar)", VariableScope.Local)
-                                     .Assign("_jar_count",  "array_length(_jar_keys)", VariableScope.Local);
-                                inner.For("var _i = 0", "_i < _jar_count", "_i++", loop =>
+                                inner.Assign("__cookie_parts__", "[]",              VariableScope.Local)
+                                     .Assign("__j__",            "0",              VariableScope.Local)
+                                     .Assign("__jar_keys__",   "struct_get_names(__instance__.cookie_jar)", VariableScope.Local)
+                                     .Assign("__jar_count__",  "array_length(__jar_keys__)", VariableScope.Local);
+                                inner.For("var __i__ = 0", "__i__ < __jar_count__", "__i__++", loop =>
                                 {
-                                    loop.Assign("_k", "_jar_keys[_i]", VariableScope.Local)
-                                        .Line("_cookie_parts[_j++] = $\"{_k}={_instance.cookie_jar[$ _k]}\";");
+                                    loop.Assign("__k__", "__jar_keys__[__i__]", VariableScope.Local)
+                                        .Line("__cookie_parts__[__j__++] = $\"{__k__}={__instance__.cookie_jar[$ __k__]}\";");
                                 });
                                 inner.If("!is_undefined(cookies)", ifBody =>
                                 {
-                                    ifBody.Assign("_exp_keys",  "struct_get_names(cookies)",    VariableScope.Local)
-                                          .Assign("_exp_count", "array_length(_exp_keys)",      VariableScope.Local);
-                                    ifBody.For("var _i = 0", "_i < _exp_count", "_i++", loop =>
+                                    ifBody.Assign("__exp_keys__",  "struct_get_names(cookies)",    VariableScope.Local)
+                                          .Assign("__exp_count__", "array_length(__exp_keys__)",      VariableScope.Local);
+                                    ifBody.For("var __i__ = 0", "__i__ < __exp_count__", "__i__++", loop =>
                                     {
-                                        loop.Assign("_k", "_exp_keys[_i]", VariableScope.Local)
-                                            .Line("_cookie_parts[_j++] = $\"{_k}={cookies[$ _k]}\";");
+                                        loop.Assign("__k__", "__exp_keys__[__i__]", VariableScope.Local)
+                                            .Line("__cookie_parts__[__j__++] = $\"{__k__}={cookies[$ __k__]}\";");
                                     });
                                 });
-                                inner.If("_j > 0", ifBody =>
-                                    ifBody.Line("_header[? \"Cookie\"] = string_join_ext(\"; \", _cookie_parts, 0, _j);")).Line();
+                                inner.If("__j__ > 0", ifBody =>
+                                    ifBody.Line("__header__[? \"Cookie\"] = string_join_ext(\"; \", __cookie_parts__, 0, __j__);")).Line();
 
-                                inner.Assign("_url", "_self._build_url(url, _params)", VariableScope.Local).Line();
+                                inner.Assign("__url__", "__self__._build_url(url, __params__)", VariableScope.Local).Line();
 
                                 inner.If("!is_undefined(raw_body)", ifBody =>
                                 {
                                     ifBody.Comment("set Content-Type before converter so it can override (e.g. multipart boundary)");
-                                    ifBody.Line("_header[? \"Content-Type\"] = content_type;");
-                                    ifBody.Assign("_processed", "_self._process_body(raw_body, content_type, _header, where)", VariableScope.Local);
-                                    ifBody.Line("_id = http_request(_url, http_method, _header, _processed);");
-                                    ifBody.If("!is_string(_processed)", elseBody =>
-                                        elseBody.Line("buffer_delete(_processed);"));
+                                    ifBody.Line("__header__[? \"Content-Type\"] = content_type;");
+                                    ifBody.Assign("__processed__", "__self__._process_body(raw_body, content_type, __header__, where)", VariableScope.Local);
+                                    ifBody.Line("__id__ = http_request(__url__, http_method, __header__, __processed__);");
+                                    ifBody.If("!is_string(__processed__)", elseBody =>
+                                        elseBody.Line("buffer_delete(__processed__);"));
                                 }, elseBody =>
                                 {
-                                    elseBody.Line("_id = http_request(_url, http_method, _header, \"\");");
+                                    elseBody.Line("__id__ = http_request(__url__, http_method, __header__, \"\");");
                                 });
                                 inner.Line();
 
-                                inner.Line("_instance.requests[? _id] = _self;");
-                                inner.Line("ds_map_destroy(_header);");
+                                inner.Line("__instance__.requests[? __id__] = __self__;");
+                                inner.Line("ds_map_destroy(__header__);");
                             });
 
                             fn.Line("attempts++;");
-                            fn.Return("_id");
+                            fn.Return("__id__");
                         }), VariableScope.Static).Line();
 
                     body.JsDoc(b => b.Returns("Real"))
@@ -211,17 +272,17 @@ namespace openapigen.Emitters.Gml
                             .Param(new ParamDoc("_body",         "Any",       null))
                             .Param(new ParamDoc("_content_type", "String",    null))
                             .Param(new ParamDoc("_header",       "Id.DsMap",  "Converter may mutate this (e.g. multipart sets boundary)."))
-                            .Param(new ParamDoc("_where",        "String",    null))
+                            .Param(new ParamDoc("__where__",        "String",    null))
                             .Returns("String|Id.Buffer")
                             .Tag("ignore"))
-                        .Assign("_process_body", w => w.Method(["_body", "_content_type", "_header", "_where"], fn =>
+                        .Assign("_process_body", w => w.Method(["_body", "_content_type", "_header", "__where__"], fn =>
                         {
-                            fn.Assign("_conv", $"{n.Priv}request_body_get_converter(_content_type)", VariableScope.Local);
-                            fn.If("!is_callable(_conv)", ifBody =>
-                                ifBody.Line($"show_error($\"{{_where}} :: No converter for '{{_content_type}}'.\", true);"));
-                            fn.Line("_body = _conv(_body, _header);");
+                            fn.Assign("__conv__", $"{n.Priv}request_body_get_converter(_content_type)", VariableScope.Local);
+                            fn.If("!is_callable(__conv__)", ifBody =>
+                                ifBody.Line($"show_error($\"{{__where__}} :: No converter for '{{_content_type}}'.\", true);"));
+                            fn.Line("_body = __conv__(_body, _header);");
                             fn.If("!is_string(_body) && (!is_handle(_body) || !string_starts_with(string(_body), \"ref buffer\"))", ifBody =>
-                                ifBody.Line($"show_error($\"{{_where}} :: Body converter must return a string or buffer.\", true);"));
+                                ifBody.Line($"show_error($\"{{__where__}} :: Body converter must return a string or buffer.\", true);"));
                             fn.Line("// feather ignore once GM1045");
                             fn.Return("_body");
                         }), VariableScope.Static).Line();
@@ -233,44 +294,50 @@ namespace openapigen.Emitters.Gml
                             .Tag("ignore"))
                         .Assign("_build_url", w => w.Method(["_url_base", "_params = undefined"], fn =>
                         {
-                            fn.Assign("_result", "[]", VariableScope.Static);
-                            fn.Assign("_params_build_array", w => w.Method(["_key", "_array"], inner =>
-                            {
-                                inner.Assign("_len", "array_length(_array)", VariableScope.Local)
-                                     .Assign("_r",   "array_create(_len)",  VariableScope.Local);
-                                inner.For("var _i = 0", "_i < _len", "++_i",
-                                    loop => loop.Line("_r[_i] = $\"{_key}={_array[_i]}\";"));
-                                inner.Return("string_join_ext(\"&\", _r)");
-                            }), VariableScope.Static).Line();
-
                             fn.If("is_undefined(_params)", ifBody => ifBody.Return("_url_base")).Line();
 
-                            fn.Assign("_keys",   "struct_get_names(_params)", VariableScope.Local)
-                              .Assign("_length", "array_length(_keys)",        VariableScope.Local)
-                              .Assign("_j",      "0",                          VariableScope.Local);
-                            fn.For("var _i = 0", "_i < _length", "_i++", loop =>
+                            fn.Assign("__pairs__",  "[]",                        VariableScope.Local)
+                              .Assign("__n__",      "0",                         VariableScope.Local)
+                              .Assign("__keys__",   "struct_get_names(_params)", VariableScope.Local)
+                              .Assign("__count__",  "array_length(__keys__)",    VariableScope.Local).Line();
+
+                            fn.For("var __i__ = 0", "__i__ < __count__", "__i__++", loop =>
                             {
-                                loop.Assign("_key",   "_keys[_i]",             VariableScope.Local)
-                                    .Assign("_value", "struct_get(_params, _key)", VariableScope.Local);
-                                loop.If("is_undefined(_value)", ifBody => ifBody.Line("continue;"));
-                                loop.Line("_result[_j++] = is_array(_value) ? _params_build_array(_key, _value) : $\"{_key}={_value}\";");
+                                loop.Assign("__key__",   "__keys__[__i__]",                    VariableScope.Local)
+                                    .Assign("__value__", "struct_get(_params, __key__)",       VariableScope.Local);
+
+                                // An undefined value means "not supplied": leave it out entirely.
+                                loop.If("is_undefined(__value__)", ifBody => ifBody.Line("continue;"));
+
+                                loop.Assign("__enc_key__", $"{n.Priv}url_encode(__key__)", VariableScope.Local);
+
+                                // Array values repeat the key, which is the common convention.
+                                loop.If("is_array(__value__)", arrBody =>
+                                {
+                                    arrBody.Assign("__alen__", "array_length(__value__)", VariableScope.Local);
+                                    arrBody.For("var __a__ = 0", "__a__ < __alen__", "__a__++", inner =>
+                                        inner.Line($"__pairs__[__n__++] = $\"{{__enc_key__}}={{{n.Priv}url_encode(__value__[__a__])}}\";"));
+                                }, elseBody =>
+                                    elseBody.Line($"__pairs__[__n__++] = $\"{{__enc_key__}}={{{n.Priv}url_encode(__value__)}}\";"));
                             }).Line();
 
-                            fn.If("_j == 0", ifBody => ifBody.Return("_url_base"));
-                            fn.Assign("_sep", "string_pos(\"?\", _url_base) == 0 ? \"?\" : \"&\"", VariableScope.Local);
-                            fn.Return("_url_base + _sep + string_join_ext(\"&\", _result, 0, _j)");
+                            fn.If("__n__ == 0", ifBody => ifBody.Return("_url_base"));
+
+                            // Preserve any query string the base URL already carries.
+                            fn.Assign("__sep__", "string_pos(\"?\", _url_base) == 0 ? \"?\" : \"&\"", VariableScope.Local);
+                            fn.Return("_url_base + __sep__ + string_join_ext(\"&\", __pairs__, 0, __n__)");
                         }), VariableScope.Static).Line();
 
                     body.JsDoc(b => b
                             .Param(new ParamDoc("_header", "Id.DsMap", null))
                             .Param(new ParamDoc("_params", "Struct",   null))
                             .Param(new ParamDoc("_scheme", "String",   null))
-                            .Param(new ParamDoc("_where",  "String",   null))
+                            .Param(new ParamDoc("__where__",  "String",   null))
                             .Tag("ignore"))
-                        .Assign("_apply_auth", w => w.Method(["_header", "_params", "_scheme", "_where"], fn =>
+                        .Assign("_apply_auth", w => w.Method(["_header", "_params", "_scheme", "__where__"], fn =>
                         {
-                            fn.Assign("missing", w => w.Method(["_where", "_token"], inner =>
-                                inner.Line("show_debug_message($\"{_where} :: missing credential for '{_token}', skipping auth.\");")),
+                            fn.Assign("missing", w => w.Method(["__where__", "_token"], inner =>
+                                inner.Line("show_debug_message($\"{__where__} :: missing credential for '{_token}', skipping auth.\");")),
                                 VariableScope.Static).Line();
 
                             fn.Switch("_scheme", sw =>
@@ -281,8 +348,8 @@ namespace openapigen.Emitters.Gml
                                     var snIdent = System.Text.RegularExpressions.Regex.Replace(sn, @"[^A-Za-z0-9_]", "_");
                                     sw.Case($"\"{sn}\"", caseBody =>
                                     {
-                                        caseBody.Assign($"_{snIdent}_token", $"{n.Priv}request_auth_get_token(\"{sn}\")", VariableScope.Local);
-                                        caseBody.If($"is_undefined(_{snIdent}_token)", ifBody =>
+                                        caseBody.Assign($"__{snIdent}_token__", $"{n.Priv}request_auth_get_token(\"{sn}\")", VariableScope.Local);
+                                        caseBody.If($"is_undefined(__{snIdent}_token__)", ifBody =>
                                         {
                                             ifBody.Line($"missing(_where, \"{sn}\");");
                                             ifBody.Line("break;");
@@ -291,18 +358,26 @@ namespace openapigen.Emitters.Gml
                                         switch (s)
                                         {
                                             case IrAuthScheme.Basic:
-                                                caseBody.Line($"_header[? \"Authorization\"] = $\"Simple {{base64_encode(_{snIdent}_token)}}\";");
+                                                caseBody.Line($"_header[? \"Authorization\"] = $\"Simple {{base64_encode(__{snIdent}_token__)}}\";");
                                                 break;
                                             case IrAuthScheme.Bearer:
                                             case IrAuthScheme.OAuth2:
                                             case IrAuthScheme.OpenIdConnect:
-                                                caseBody.Line($"_header[? \"Authorization\"] = $\"Bearer {{_{snIdent}_token}}\";");
+                                                caseBody.Line($"_header[? \"Authorization\"] = $\"Bearer {{__{snIdent}_token__}}\";");
                                                 break;
                                             case IrAuthScheme.ApiKey apiKey when apiKey.In == IrLocation.Header:
-                                                caseBody.Line($"_header[? \"{apiKey.ParamName}\"] = _{snIdent}_token;");
+                                                caseBody.Line($"_header[? \"{apiKey.ParamName}\"] = __{snIdent}_token__;");
                                                 break;
                                             case IrAuthScheme.ApiKey apiKey when apiKey.In == IrLocation.Query:
-                                                caseBody.Line($"_params[$ \"{apiKey.ParamName}\"] = _{snIdent}_token;");
+                                                caseBody.Line($"_params[$ \"{apiKey.ParamName}\"] = __{snIdent}_token__;");
+                                                break;
+                                            case IrAuthScheme.ApiKey apiKey when apiKey.In == IrLocation.Cookie:
+                                                // Appended to whatever the cookie jar already set.
+                                                caseBody.Assign("__existing__", "_header[? \"Cookie\"]", VariableScope.Local);
+                                                caseBody.Line(
+                                                    $"_header[? \"Cookie\"] = is_undefined(__existing__) " +
+                                                    $"? $\"{apiKey.ParamName}={{__{snIdent}_token__}}\" " +
+                                                    $": $\"{{__existing__}}; {apiKey.ParamName}={{__{snIdent}_token__}}\";");
                                                 break;
                                         }
                                     });
@@ -310,7 +385,7 @@ namespace openapigen.Emitters.Gml
 
                                 sw.Case("undefined", caseBody => { });
                                 sw.Default(d =>
-                                    d.Line("show_debug_message($\"{_where} :: No auth rule for '{_scheme}'.\");"));
+                                    d.Line("show_debug_message($\"{__where__} :: No auth rule for '{_scheme}'.\");"));
                             });
                         }), VariableScope.Static).Line();
 
@@ -330,55 +405,56 @@ namespace openapigen.Emitters.Gml
                 .Param(new ParamDoc("_url",          "String",           null))
                 .Param(new ParamDoc("_params",        "Struct|Undefined", null))
                 .Param(new ParamDoc("_method",        "String",           null))
+                .Param(new ParamDoc("_headers",       "Struct|Undefined", "Header parameters declared by the endpoint."))
                 .Param(new ParamDoc("_body",          "Any",              null))
                 .Param(new ParamDoc("_content_type",  "String|Undefined", null))
                 .Param(new ParamDoc("_security",      "Array|Undefined",  null))
                 .Param(new ParamDoc("_cookies",       "Struct|Undefined", null))
                 .Param(new ParamDoc("_callback",      "Function",         null))
-                .Param(new ParamDoc("_where",         "String",           null))
+                .Param(new ParamDoc("__where__",         "String",           null))
                 .Returns("Real")
                 .Tag("ignore"))
              .Function($"{n.Priv}create_request",
-                ["_url", "_params", "_method", "_body", "_content_type", "_security", "_cookies", "_callback", "_where"],
+                ["_url", "_params", "_method", "_headers", "_body", "_content_type", "_security", "_cookies", "_callback", "__where__"],
                 fn =>
                 {
-                    fn.Assign("_req", $"new {n.StructPrefix}Request(_url, _params, _method, _body, _content_type, _security, _cookies, _callback, _where)", VariableScope.Local)
-                      .Return("_req.send()");
+                    fn.Assign("__req__", $"new {n.StructPrefix}Request(_url, _params, _method, _headers, _body, _content_type, _security, _cookies, _callback, _where)", VariableScope.Local)
+                      .Return("__req__.send()");
                 }).Line();
         }
 
         private static void EmitCookieApi(GmlWriter w, GmlNaming n)
         {
             w.JsDoc(b => b
-                .Param(new ParamDoc("_name",  "String", null))
-                .Param(new ParamDoc("_value", "String", null)))
-             .Function($"{n.Pub}cookie_set", ["_name", "_value"], fn =>
+                .Param(new ParamDoc("__name__",  "String", null))
+                .Param(new ParamDoc("__value2__", "String", null)))
+             .Function($"{n.Pub}cookie_set", ["__name__", "__value2__"], fn =>
              {
-                 fn.Assign("_instance", $"{n.Priv}get_singleton(_GMFUNCTION_)", VariableScope.Local)
-                   .Assign(w => w.Access("_instance.cookie_jar", AccessorKind.Struct, "_name"), "_value");
+                 fn.Assign("__instance__", $"{n.Priv}get_singleton(_GMFUNCTION_)", VariableScope.Local)
+                   .Assign(w => w.Access("__instance__.cookie_jar", AccessorKind.Struct, "__name__"), "__value2__");
              }).Line();
 
             w.JsDoc(b => b
-                .Param(new ParamDoc("_name", "String", null))
+                .Param(new ParamDoc("__name__", "String", null))
                 .Returns("String|Undefined"))
-             .Function($"{n.Pub}cookie_get", ["_name"], fn =>
+             .Function($"{n.Pub}cookie_get", ["__name__"], fn =>
              {
-                 fn.Assign("_instance", $"{n.Priv}get_singleton(_GMFUNCTION_)", VariableScope.Local)
-                   .Return(r => r.Access("_instance.cookie_jar", AccessorKind.Struct, "_name"));
+                 fn.Assign("__instance__", $"{n.Priv}get_singleton(_GMFUNCTION_)", VariableScope.Local)
+                   .Return(r => r.Access("__instance__.cookie_jar", AccessorKind.Struct, "__name__"));
              }).Line();
 
-            w.JsDoc(b => b.Param(new ParamDoc("_name", "String", null)))
-             .Function($"{n.Pub}cookie_delete", ["_name"], fn =>
+            w.JsDoc(b => b.Param(new ParamDoc("__name__", "String", null)))
+             .Function($"{n.Pub}cookie_delete", ["__name__"], fn =>
              {
-                 fn.Assign("_instance", $"{n.Priv}get_singleton(_GMFUNCTION_)", VariableScope.Local)
-                   .Line("struct_remove(_instance.cookie_jar, _name);");
+                 fn.Assign("__instance__", $"{n.Priv}get_singleton(_GMFUNCTION_)", VariableScope.Local)
+                   .Line("struct_remove(__instance__.cookie_jar, _name);");
              }).Line();
 
             w.JsDoc(_ => { })
              .Function($"{n.Pub}cookie_clear", [], fn =>
             {
-                fn.Assign("_instance", $"{n.Priv}get_singleton(_GMFUNCTION_)", VariableScope.Local)
-                  .Assign("_instance.cookie_jar", "{}");
+                fn.Assign("__instance__", $"{n.Priv}get_singleton(_GMFUNCTION_)", VariableScope.Local)
+                  .Assign("__instance__.cookie_jar", "{}");
             }).Line();
 
             w.JsDoc(b => b
@@ -386,21 +462,26 @@ namespace openapigen.Emitters.Gml
                 .Tag("ignore"))
              .Function($"{n.Priv}cookie_capture", ["_set_cookie_header"], fn =>
              {
-                 fn.Assign("_instance", $"{n.Priv}get_singleton(_GMFUNCTION_)", VariableScope.Local);
-                 fn.Assign("_parts", "string_split(_set_cookie_header, \",\")", VariableScope.Local)
-                   .Assign("_count", "array_length(_parts)", VariableScope.Local);
+                 fn.Assign("__instance__", $"{n.Priv}get_singleton(_GMFUNCTION_)", VariableScope.Local);
 
-                 fn.For("var _i = 0", "_i < _count", "_i++", loop =>
+                 // GameMaker comma-joins repeated Set-Cookie headers into one value.
+                 fn.Assign("__parts__", "string_split(_set_cookie_header, \",\")", VariableScope.Local)
+                   .Assign("__count__", "array_length(__parts__)", VariableScope.Local);
+
+                 fn.For("var __i__ = 0", "__i__ < __count__", "__i__++", loop =>
                  {
-                     loop.Assign("_pair_parts", "string_split(_parts[_i], \";\")", VariableScope.Local);
-                     loop.If("array_length(_pair_parts) == 0", ifBody => ifBody.Line("continue;"));
-                     loop.Assign("_pair", "string_trim(_pair_parts[0])", VariableScope.Local)
-                         .Assign("_eq",   "string_pos(\"=\", _pair)",   VariableScope.Local);
-                     loop.If("_eq <= 0", ifBody => ifBody.Line("continue;"));
-                     loop.Assign("_name",  "string_trim(string_copy(_pair, 1, _eq - 1))", VariableScope.Local)
-                         .Assign("_value", "string_copy(_pair, _eq + 1, string_length(_pair) - _eq)", VariableScope.Local);
-                     loop.If("string_length(_name) > 0", ifBody =>
-                         ifBody.Assign(w => w.Access("_instance.cookie_jar", AccessorKind.Struct, "_name"), "_value"));
+                     // Everything after the first ';' is cookie attributes, not the value.
+                     loop.Assign("__pair_parts__", "string_split(__parts__[__i__], \";\")", VariableScope.Local);
+                     loop.If("array_length(__pair_parts__) == 0", ifBody => ifBody.Line("continue;"));
+
+                     loop.Assign("__pair__", "string_trim(__pair_parts__[0])", VariableScope.Local)
+                         .Assign("__eq__",   "string_pos(\"=\", __pair__)",   VariableScope.Local);
+                     loop.If("__eq__ <= 0", ifBody => ifBody.Line("continue;"));
+
+                     loop.Assign("__name__",  "string_trim(string_copy(__pair__, 1, __eq__ - 1))", VariableScope.Local)
+                         .Assign("__value__", "string_copy(__pair__, __eq__ + 1, string_length(__pair__) - __eq__)", VariableScope.Local);
+                     loop.If("string_length(__name__) > 0", ifBody =>
+                         ifBody.Assign(w => w.Access("__instance__.cookie_jar", AccessorKind.Struct, "__name__"), "__value__"));
                  });
              }).Line();
         }

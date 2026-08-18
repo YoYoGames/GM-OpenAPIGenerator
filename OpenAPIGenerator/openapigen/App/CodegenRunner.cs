@@ -1,14 +1,17 @@
-using openapigen.Emitters.Docs;
-using openapigen.Emitters.Gml;
-using openapigen.Helpers;
 using openapigen.Config;
+using openapigen.Models.Config;
 using openapigen.Model;
 using openapigen.Parsing.OpenApi;
+using openapigen.Planning;
+using openapigen.Utils;
 using System.Text;
 using System.Text.Json;
 
 namespace openapigen.App
 {
+    /// <summary>
+    /// Orchestrates generation, from configuration through to emitter execution.
+    /// </summary>
     public sealed class CodegenRunner
     {
         private readonly JsonSerializerOptions _jsonOptions;
@@ -20,8 +23,18 @@ namespace openapigen.App
             _schema = schema ?? throw new ArgumentNullException(nameof(schema));
         }
 
+        /// <summary>
+        /// Runs the pipeline for a config file.
+        /// </summary>
+        /// <returns>0 on success; a non-zero exit code describing the failing stage otherwise.</returns>
         public int RunFromConfig(string configPath)
         {
+            // 1. Locate config
+            // 2. Refresh the JSON schema beside it (editor autocomplete) and patch $schema
+            // 3. Load and resolve config
+            // 4. Parse the OpenAPI spec into IR
+            // 5. Run each enabled emitter
+
             var fullConfigPath = Path.GetFullPath(configPath);
             if (!File.Exists(fullConfigPath))
             {
@@ -54,19 +67,21 @@ namespace openapigen.App
                 return 5;
             }
 
-            var cfgDir = Path.GetDirectoryName(fullConfigPath)!;
-            var inputPath = Path.GetFullPath(Path.Combine(cfgDir, cfg.Input));
-
-            if (!File.Exists(inputPath))
+            ResolvedConfig rc;
+            try
             {
-                Console.Error.WriteLine($"Input spec not found: {inputPath}");
-                return 3;
+                rc = ConfigResolver.Resolve(cfg, fullConfigPath, PathUtils.ResolvePath);
+            }
+            catch (Exception ex)
+            {
+                Console.Error.WriteLine(ex.Message);
+                return 5;
             }
 
             IrWebCompilation ir;
             try
             {
-                ir = OpenApiSchemaLoader.LoadFromFile(inputPath);
+                ir = OpenApiSchemaLoader.LoadFromFile(rc.InputPath, rc.Raw.RequireOperationId);
             }
             catch (Exception ex)
             {
@@ -74,34 +89,24 @@ namespace openapigen.App
                 return 6;
             }
 
-            var naming = new GmlNaming(cfg.Prefix);
+            var emitters = EmitterBuilder.Build(rc);
 
-            if (cfg.Gml.Enabled)
+            if (emitters.Count == 0)
             {
-                var outDir = Path.GetFullPath(Path.Combine(cfgDir, cfg.Gml.OutputFolder));
-                Console.WriteLine($"[openapigen] GML -> {outDir}");
-                try
-                {
-                    new HttpGmlEmitter(naming).Emit(ir, outDir);
-                }
-                catch (Exception ex)
-                {
-                    Console.Error.WriteLine($"[GML] Failed: {ex.Message}");
-                    return 30;
-                }
+                Console.WriteLine("[openapigen] No outputs enabled in config. Nothing to generate.");
+                return 0;
             }
 
-            if (cfg.Docs.Enabled)
+            foreach (var (key, emitter) in emitters)
             {
-                var outDir = Path.GetFullPath(Path.Combine(cfgDir, cfg.Docs.OutputFolder));
-                Console.WriteLine($"[openapigen] Docs -> {outDir}");
                 try
                 {
-                    new DocsEmitter(naming).Emit(ir, outDir);
+                    emitter.Emit(ir, rc.OutputRoot);
+                    Console.WriteLine($"[openapigen] {key} -> {Describe(rc, key)}");
                 }
                 catch (Exception ex)
                 {
-                    Console.Error.WriteLine($"[Docs] Failed: {ex.Message}");
+                    Console.Error.WriteLine($"[{key}] Failed: {ex.Message}");
                     return 30;
                 }
             }
@@ -110,55 +115,22 @@ namespace openapigen.App
             return 0;
         }
 
-        public int RunDirect(string inputPath, string outputDir, string prefix, bool emitDocs)
+        private static string Describe(ResolvedConfig rc, string key)
         {
-            if (!File.Exists(inputPath))
+            var file = key switch
             {
-                Console.Error.WriteLine($"Input spec not found: {inputPath}");
-                return 3;
-            }
+                "schemas" => rc.Raw.Code.Schemas?.OutputFile,
+                "endPoints" => rc.Raw.Code.EndPoints?.OutputFile,
+                "helpers" => rc.Raw.Code.Helpers?.OutputFile,
+                "controller.createEvent" => rc.Raw.Controller.CreateEvent?.OutputFile,
+                "controller.cleanupEvent" => rc.Raw.Controller.CleanupEvent?.OutputFile,
+                "controller.httpAsyncEvent" => rc.Raw.Controller.HttpAsyncEvent?.OutputFile,
+                "docs.schemas" => rc.Raw.Docs.Schemas?.OutputFile,
+                "docs.functions" => rc.Raw.Docs.Functions?.OutputFile,
+                _ => null
+            };
 
-            IrWebCompilation ir;
-            try
-            {
-                ir = OpenApiSchemaLoader.LoadFromFile(inputPath);
-            }
-            catch (Exception ex)
-            {
-                Console.Error.WriteLine($"Failed to parse spec: {ex.Message}");
-                return 6;
-            }
-
-            var naming = new GmlNaming(prefix);
-            var outDir = Path.GetFullPath(outputDir);
-
-            Console.WriteLine($"[openapigen] GML -> {outDir}");
-            try
-            {
-                new HttpGmlEmitter(naming).Emit(ir, outDir);
-            }
-            catch (Exception ex)
-            {
-                Console.Error.WriteLine($"[GML] Failed: {ex.Message}");
-                return 30;
-            }
-
-            if (emitDocs)
-            {
-                Console.WriteLine($"[openapigen] Docs -> {outDir}");
-                try
-                {
-                    new DocsEmitter(naming).Emit(ir, outDir);
-                }
-                catch (Exception ex)
-                {
-                    Console.Error.WriteLine($"[Docs] Failed: {ex.Message}");
-                    return 30;
-                }
-            }
-
-            Console.WriteLine("[openapigen] Success [x]");
-            return 0;
+            return file.ResolvePath(rc.OutputRoot);
         }
     }
 }
