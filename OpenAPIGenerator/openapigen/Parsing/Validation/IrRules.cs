@@ -1,3 +1,4 @@
+using openapigen.Helpers;
 using openapigen.Model;
 
 namespace openapigen.Parsing.Validation
@@ -52,27 +53,61 @@ namespace openapigen.Parsing.Validation
     }
 
     /// <summary>
-    /// Generated endpoint function names must be unique — GML has a single global function scope,
-    /// so a duplicate silently shadows an operation.
+    /// Two operations must not ask for the same generated function name — GML has a single global
+    /// function scope, so one would shadow the other.
+    ///
+    /// The parser resolves the clash with a numeric suffix so the emitted file still compiles, which
+    /// means the duplicate never survives into the IR. What survives is the *evidence*: an endpoint
+    /// whose <c>operationId</c> no longer produces its own name was the loser of a collision. Checking
+    /// for that is what makes this rule reachable at all — grouping the finished IR by name cannot
+    /// work, because the parser has already made those names unique.
+    ///
+    /// Errors by default; a warning when <c>requireOperationId</c> is false, matching
+    /// <see cref="OperationIdRequiredRule"/> — that flag means a third-party spec the user cannot edit,
+    /// and making it ungeneratable would defeat its purpose. The rename is reported either way.
     /// </summary>
-    public sealed class NoDuplicateEndpointNamesRule : IIrRule
+    public sealed class NoDuplicateEndpointNamesRule(bool required) : IIrRule
     {
         public IEnumerable<IrDiagnostic> Validate(IrWebCompilation comp)
         {
-            foreach (var group in comp.Endpoints.GroupBy(e => e.Name, StringComparer.Ordinal).Where(g => g.Count() > 1))
+            var renamed = comp.Endpoints
+                .Select(e => (Endpoint: e, Intended: NameUtils.IntendedEndpointFuncName(e.OperationId)))
+                .Where(x => x.Intended.Length > 0
+                            && !string.Equals(x.Intended, x.Endpoint.Name, StringComparison.Ordinal))
+                .ToList();
+
+            foreach (var group in renamed.GroupBy(x => x.Intended, StringComparer.Ordinal))
             {
+                var holder = comp.Endpoints.FirstOrDefault(e =>
+                    string.Equals(e.Name, group.Key, StringComparison.Ordinal));
+
+                var claimants = new List<string>();
+                if (holder is not null)
+                    claimants.Add($"{holder.Verb} {holder.PathTemplate} (kept '{group.Key}')");
+
+                claimants.AddRange(group.Select(x =>
+                    $"{x.Endpoint.Verb} {x.Endpoint.PathTemplate} (renamed to '{x.Endpoint.Name}')"));
+
                 yield return new IrDiagnostic(
                     "IR_SYM_001",
-                    $"{group.Count()} operations generate the same function name '{group.Key}': " +
-                    string.Join(", ", group.Select(e => $"{e.Verb} {e.PathTemplate}")),
-                    IrSeverity.Error,
+                    $"{claimants.Count} operations generate the same function name '{group.Key}': " +
+                    string.Join(", ", claimants) + ". " +
+                    "Generated names are permanent public API and the suffix is positional — reordering " +
+                    "the spec would move it to a different operation. Give each a distinct operationId.",
+                    required ? IrSeverity.Error : IrSeverity.Warning,
                     group.Key);
             }
         }
     }
 
     /// <summary>
-    /// Schema names must be unique for the same reason: one constructor per name.
+    /// Schema names must be unique: one constructor per name.
+    ///
+    /// **Unreachable by construction, and kept deliberately.** Components are keyed by name by OpenAPI
+    /// itself, inline-vs-inline collisions are resolved by the inline counter, and inline-vs-component
+    /// collisions are prevented by the parser reserving the component namespace before it builds
+    /// anything. This rule is retained as a cheap assertion in case a future change introduces a third
+    /// way to register a schema name.
     /// </summary>
     public sealed class NoDuplicateSchemaNamesRule : IIrRule
     {

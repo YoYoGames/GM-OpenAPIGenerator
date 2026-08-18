@@ -351,7 +351,7 @@ namespace openapigen.Emitters.Gml
                                         caseBody.Assign($"__{snIdent}_token__", $"{n.Priv}request_auth_get_token(\"{sn}\")", VariableScope.Local);
                                         caseBody.If($"is_undefined(__{snIdent}_token__)", ifBody =>
                                         {
-                                            ifBody.Line($"missing(_where, \"{sn}\");");
+                                            ifBody.Line($"missing(__where__, \"{sn}\");");
                                             ifBody.Line("break;");
                                         });
 
@@ -418,7 +418,7 @@ namespace openapigen.Emitters.Gml
                 ["_url", "_params", "_method", "_headers", "_body", "_content_type", "_security", "_cookies", "_callback", "__where__"],
                 fn =>
                 {
-                    fn.Assign("__req__", $"new {n.StructPrefix}Request(_url, _params, _method, _headers, _body, _content_type, _security, _cookies, _callback, _where)", VariableScope.Local)
+                    fn.Assign("__req__", $"new {n.StructPrefix}Request(_url, _params, _method, _headers, _body, _content_type, _security, _cookies, _callback, __where__)", VariableScope.Local)
                       .Return("__req__.send()");
                 }).Line();
         }
@@ -447,7 +447,7 @@ namespace openapigen.Emitters.Gml
              .Function($"{n.Pub}cookie_delete", ["__name__"], fn =>
              {
                  fn.Assign("__instance__", $"{n.Priv}get_singleton(_GMFUNCTION_)", VariableScope.Local)
-                   .Line("struct_remove(__instance__.cookie_jar, _name);");
+                   .Line("struct_remove(__instance__.cookie_jar, __name__);");
              }).Line();
 
             w.JsDoc(_ => { })

@@ -49,7 +49,7 @@ namespace openapigen.Parsing.OpenApi
             var validator = new IrValidator(
                 // Naming
                 new OperationIdRequiredRule(requireOperationId),
-                new NoDuplicateEndpointNamesRule(),
+                new NoDuplicateEndpointNamesRule(requireOperationId),
                 new NoDuplicateSchemaNamesRule(),
 
                 // Structure

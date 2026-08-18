@@ -99,8 +99,61 @@ namespace openapigen.Helpers
             "argument4","argument5","argument6","argument7","argument8","argument9",
             "argument10","argument11","argument12","argument13","argument14","argument15",
 
-            // Built-in variables that are not writable as plain struct members
-            "score","room","async_load","event_data",
+            // ---------------------------------------------------------------
+            // Global built-in variables.
+            //
+            // A constructor assigns to `self`, so `field = value` normally creates a struct member.
+            // These are the exception: the name resolves to the built-in global instead. Read-only
+            // ones ("fps") are a hard compile error in the consumer's project; writable ones
+            // ("health", "lives") silently write the global and never create the member, so reading
+            // it back throws.
+            //
+            // INSTANCE built-ins are deliberately NOT here and must not be added. Inside a
+            // constructor `self` is the struct, so `id`, `x`, `y`, `depth`, `speed`, `direction`,
+            // `sprite_index`, `alarm`, `layer` and friends become ordinary struct members. `id`
+            // alone appears in a large fraction of real-world schemas; reserving it would rewrite
+            // all of them to `self[$ "id"]` for no benefit.
+            //
+            // Completeness cannot be proven from here — GameMaker adds built-ins between runtime
+            // versions. Over-inclusion only costs readability (the member is emitted through the
+            // accessor); under-inclusion emits code that is silently wrong or does not compile. So
+            // this list errs toward inclusion, and new names should simply be appended.
+            // ---------------------------------------------------------------
+
+            // Game state
+            "score","lives","health","debug_mode","error_last","error_occurred","iap_data",
+            "gamemaker_pro","gamemaker_registered","secure_mode",
+
+            // Rooms
+            "room","room_speed","room_width","room_height","room_persistent","room_first","room_last",
+
+            // Timing
+            "fps","fps_real","delta_time","current_time",
+            "current_year","current_month","current_day","current_weekday",
+            "current_hour","current_minute","current_second",
+
+            // Input
+            "keyboard_key","keyboard_lastkey","keyboard_lastchar","keyboard_string",
+            "mouse_button","mouse_lastbutton","mouse_x","mouse_y","cursor_sprite",
+
+            // Display / drawing
+            "application_surface","view_current","view_enabled","display_aa","webgl_enabled",
+            "background_colour","background_color",
+            "transition_kind","transition_steps",
+
+            // Game / environment identity
+            "game_id","game_display_name","game_project_name","game_save_id",
+            "working_directory","program_directory","temp_directory",
+            "os_type","os_device","os_version","os_browser","browser_width","browser_height",
+
+            // Events and async
+            "async_load","event_data","event_type","event_number","event_object","event_action",
+
+            // Instances
+            "instance_count","instance_id",
+
+            // Pointers
+            "pointer_null","pointer_invalid",
         };
 
 
@@ -115,6 +168,27 @@ namespace openapigen.Helpers
         public static string EndpointFuncName(string operationId)
         {
             return ToSnake(operationId);
+        }
+
+        /// <summary>
+        /// The GML function name an <c>operationId</c> is meant to produce, before any collision
+        /// resolution. Empty when the operation declares none, or when it snake_cases to nothing.
+        /// </summary>
+        /// <remarks>
+        /// Shared deliberately: the parser assigns names with this, and <c>NoDuplicateEndpointNamesRule</c>
+        /// detects a collision by finding an endpoint whose name no longer matches it. Two copies of
+        /// this logic would drift, and the rule would silently stop detecting anything.
+        /// </remarks>
+        public static string IntendedEndpointFuncName(string? operationId)
+        {
+            if (string.IsNullOrWhiteSpace(operationId))
+                return string.Empty;
+
+            var name = EndpointFuncName(operationId);
+            if (name.Length == 0)
+                return string.Empty;
+
+            return char.IsLetter(name[0]) || name[0] == '_' ? name : "_" + name;
         }
 
         [GeneratedRegex(@"\{[^}]+\}", RegexOptions.Compiled)]

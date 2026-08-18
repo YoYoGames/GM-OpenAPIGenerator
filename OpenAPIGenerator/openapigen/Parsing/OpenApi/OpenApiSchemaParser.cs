@@ -24,6 +24,13 @@ namespace openapigen.Parsing.OpenApi
 
         public IrWebCompilation Build()
         {
+            // 0) Reserve the component namespace before anything is built. Inline names are minted
+            //    *while* components are being walked, so a name synthesised for one component's
+            //    property could otherwise claim a component that has not been registered yet — and
+            //    EnsureDeclForComponent would then drop the real one on its ContainsKey guard.
+            foreach (var name in _doc.Components?.Schemas?.Keys ?? [])
+                _ctx.ReservedSchemaNames.Add(name);
+
             // 1) Auth schemes
             if (_doc.Components?.SecuritySchemes is not null)
             {
@@ -39,12 +46,40 @@ namespace openapigen.Parsing.OpenApi
             }
 
             // 3) Endpoints
+            var operations = new List<(string Path, string Verb, OpenApiOperation Op)>();
             foreach (var (path, item) in _doc.Paths)
             {
                 if (item.Operations is null) continue;
 
                 foreach (var (verb, op) in item.Operations)
-                    _ctx.Endpoints.Add(ToEndpoint(path, verb.ToString(), op));
+                    operations.Add((path, verb.ToString(), op));
+            }
+
+            // Names are assigned in two passes rather than in document order. An author-chosen
+            // operationId is public API; a URL-derived name is synthetic. Taking the authored ones
+            // first means a synthetic name can never displace one just by appearing earlier in the
+            // document.
+            var names = new string?[operations.Count];
+
+            for (var i = 0; i < operations.Count; i++)
+            {
+                var intended = NameUtils.IntendedEndpointFuncName(operations[i].Op.OperationId);
+                if (intended.Length > 0)
+                    names[i] = Deduplicate(intended);
+            }
+
+            for (var i = 0; i < operations.Count; i++)
+            {
+                if (names[i] is not null) continue;
+
+                var (path, verb, op) = operations[i];
+                names[i] = GmlEndpointName.Make(Tags(op).FirstOrDefault() ?? "", verb, path, _usedNames);
+            }
+
+            for (var i = 0; i < operations.Count; i++)
+            {
+                var (path, verb, op) = operations[i];
+                _ctx.Endpoints.Add(ToEndpoint(path, verb, op, names[i]!));
             }
 
             return new IrWebCompilation(
@@ -58,15 +93,16 @@ namespace openapigen.Parsing.OpenApi
         // ENDPOINTS
         // ====================================================================
 
-        private IrHttpEndpoint ToEndpoint(string path, string verb, OpenApiOperation op)
+        private static ImmutableArray<string> Tags(OpenApiOperation op) =>
+            op.Tags?.Select(t => t.Name)
+                    .Where(n => !string.IsNullOrWhiteSpace(n))
+                    .Select(n => n!)
+                    .ToImmutableArray() ?? [];
+
+        private IrHttpEndpoint ToEndpoint(string path, string verb, OpenApiOperation op, string opName)
         {
             var parameters = op.Parameters?.Select(ToParam).ToImmutableArray() ?? [];
-            var tags = op.Tags?.Select(t => t.Name)
-                              .Where(n => !string.IsNullOrWhiteSpace(n))
-                              .Select(n => n!)
-                              .ToImmutableArray() ?? [];
-
-            var opName = MakeEndpointName(op, tags, verb, path);
+            var tags = Tags(op);
 
             return new IrHttpEndpoint(
                 Name: opName,
@@ -84,27 +120,15 @@ namespace openapigen.Parsing.OpenApi
         }
 
         /// <summary>
-        /// Endpoint names come from <c>operationId</c>, snake_cased. Operations without one fall
-        /// back to the path/verb/tag derivation. Both paths run through <paramref name="_usedNames"/>
-        /// so a duplicate can never emit two GML functions with the same global name.
+        /// Resolves a name collision so emission always produces unique GML function names.
         /// </summary>
-        private string MakeEndpointName(OpenApiOperation op, ImmutableArray<string> tags, string verb, string path)
-        {
-            var name = string.IsNullOrWhiteSpace(op.OperationId)
-                ? string.Empty
-                : NameUtils.EndpointFuncName(op.OperationId!);
-
-            // A missing operationId is reported by OperationIdRequiredRule, not here — parsing
-            // stays a pure transform and every policy decision lives in the validation layer.
-            if (name.Length == 0)
-                return GmlEndpointName.Make(tags.FirstOrDefault() ?? "", verb, path, _usedNames);
-
-            if (!char.IsLetter(name[0]) && name[0] != '_')
-                name = "_" + name;
-
-            return Deduplicate(name);
-        }
-
+        /// <remarks>
+        /// Renaming here is a repair, not an outcome: for an author-chosen <c>operationId</c> it means
+        /// the generated public API no longer matches what the spec asked for.
+        /// <c>NoDuplicateEndpointNamesRule</c> reports that by comparing each endpoint's name against
+        /// <see cref="NameUtils.IntendedEndpointFuncName"/>. Policy stays in the validation layer;
+        /// this only keeps the emitted file compilable.
+        /// </remarks>
         private string Deduplicate(string name)
         {
             if (_usedNames.Add(name))
@@ -471,16 +495,33 @@ namespace openapigen.Parsing.OpenApi
         /// Names an inline (anonymous) schema from its owner hint, normalised to PascalCase so the
         /// emitted constructor reads as a type: "uploadAvatar_body" becomes "UploadAvatarBody".
         /// </summary>
+        /// <remarks>
+        /// The counter is advanced past any name already taken by a declared component or an earlier
+        /// inline schema. Without that, a hint colliding with a component overwrote it — or, when the
+        /// inline was minted first, made the real component get dropped by
+        /// <see cref="EnsureDeclForComponent"/>'s re-entry guard. An inline name is invented by this
+        /// tool rather than chosen by the spec author, so shifting it is silent by design: there is no
+        /// contract to break and nothing the user could do about it.
+        /// </remarks>
         private string MakeInlineName(string hint)
         {
             var baseName = ToPascalCase(hint);
             if (baseName.Length == 0)
                 baseName = "Anonymous";
 
-            if (!_ctx.InlineCounters.TryGetValue(baseName, out var n))
-                n = 0;
-            _ctx.InlineCounters[baseName] = n + 1;
-            return n == 0 ? baseName : $"{baseName}{n + 1}";
+            var n = _ctx.InlineCounters.TryGetValue(baseName, out var seen) ? seen : 0;
+
+            string candidate;
+            do
+            {
+                candidate = n == 0 ? baseName : $"{baseName}{n + 1}";
+                n++;
+            }
+            while (_ctx.ReservedSchemaNames.Contains(candidate) || _ctx.Decls.ContainsKey(candidate));
+
+            _ctx.InlineCounters[baseName] = n;
+            _ctx.ReservedSchemaNames.Add(candidate);
+            return candidate;
         }
 
         private static string ToPascalCase(string raw)
@@ -494,6 +535,13 @@ namespace openapigen.Parsing.OpenApi
         private sealed class BuildContext
         {
             internal readonly Dictionary<string, IrSchema> Decls = new();
+
+            /// <summary>
+            /// Every schema name spoken for — declared components (seeded before anything is built)
+            /// plus inline names already minted. Guards <see cref="MakeInlineName"/>.
+            /// </summary>
+            internal readonly HashSet<string> ReservedSchemaNames = new(StringComparer.Ordinal);
+
             internal readonly Dictionary<IOpenApiSchema, string> InlineNames = new();
             internal readonly Dictionary<string, int> InlineCounters = new();
             internal readonly List<IrHttpEndpoint> Endpoints = new();

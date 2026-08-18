@@ -122,7 +122,10 @@ namespace openapigen.Helpers
             if (!resolver.TryGet(named.Name, out _))
                 return;
 
-            w.Line($"{n.StructPrefix}{named.Name}_validate({expr}, {whereVar});");
+            // The field name is folded into the location the nested validator reports against.
+            // Several fields of one struct commonly share a type, so the type name alone does not
+            // say which one was wrong.
+            w.Line($"{n.StructPrefix}{named.Name}_validate({expr}, $\"{{{whereVar}}} :: {San(nameForError)}\");");
         }
 
         /// <summary>Emits an is-string check plus a switch over the enum's literals.</summary>
@@ -203,8 +206,10 @@ namespace openapigen.Helpers
                 BuiltinKind.Int64 or BuiltinKind.UInt64 or
                 BuiltinKind.Float32 or BuiltinKind.Float64 => $"!is_real({expr})",
 
-                // A GML buffer is a handle; buffer_exists is the only meaningful runtime check.
-                BuiltinKind.Buffer => $"!buffer_exists({expr})",
+                // A GML buffer is a handle; buffer_exists is the only meaningful liveness check, but
+                // it throws on a string and reports true for any real matching a live buffer id, so
+                // is_handle has to gate it.
+                BuiltinKind.Buffer => $"!(is_handle({expr}) && buffer_exists({expr}))",
 
                 BuiltinKind.Function => $"!is_callable({expr})",
 

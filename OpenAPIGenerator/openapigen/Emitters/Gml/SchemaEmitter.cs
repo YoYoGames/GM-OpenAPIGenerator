@@ -144,6 +144,14 @@ namespace openapigen.Emitters.Gml
 
             ValidatorScaffold.Emit(w, structName, n, fn =>
             {
+                // Without this the first field access fails inside the engine
+                // ("struct_get_from_hash argument 1 incorrect type"), and the caller never sees the
+                // message this function exists to produce. Only the struct path gets the guard —
+                // enum, alias and composite validators are handed non-structs by design.
+                fn.Line($"if (!is_struct({ValidatorScaffold.InstVar})) " +
+                        $"throw $\"{{{ValidatorScaffold.WhereVar}}} :: expected Struct.{structName}\";")
+                  .Line();
+
                 foreach (var f in fields)
                 {
                     ValueSchemaValidatorEmitter.Emit(
