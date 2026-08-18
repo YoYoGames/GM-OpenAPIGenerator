@@ -23,6 +23,7 @@ type-checked GML layer.
 - [What gets generated](#what-gets-generated)
 - [Requirements](#requirements)
 - [Command-line usage](#command-line-usage)
+- [Configuration](#configuration)
 - [Examples](#examples)
 - [Supported OpenAPI features](#supported-openapi-features)
 - [Limitations](#limitations)
@@ -34,16 +35,18 @@ type-checked GML layer.
 
 ## Features
 
-- **OpenAPI 3.x** JSON or YAML input
-- Generates a single `generated_http.gml` containing:
-  - **Schemas**: GML constructors (structs) + `validate()` methods
-  - **Endpoints**: one wrapper per operation
-  - **Auth helper**: `_…request_apply_auth(...)` (separate file)
+- **OpenAPI 3.x** JSON or YAML input (format detected from the file extension)
+- Generates up to eight files, each independently placed via `config.json`:
+  - **Schemas**: GML constructors (structs) + a `_validate` function per schema
+  - **Endpoints**: one wrapper per operation, named from `operationId`
+  - **Helpers**: request struct, auth injection, cookie jar, URL encoding
+  - **Controller events** and **Feather doc partials**
 - **Parameter handling**
-  - Required params first, optional after (defaulted to `undefined`)
-  - Path params are inserted into the URL
-  - Query params collected into a struct (undefined entries ignored downstream)
-  - Header params emitted into a `ds_map`
+  - Required params first, optional after (spec `default` values are emitted)
+  - Path params are inserted into the URL, percent-encoded
+  - Query params collected into a struct; undefined entries are omitted
+  - Header params collected into a struct and merged into the request headers
+  - Cookie params are handled by the cookie jar, not exposed as arguments
 - **Request bodies**
   - Supports `application/json`, `application/*+json`,
     `application/x-www-form-urlencoded`, `multipart/form-data`, `text/plain`, `*/*`
@@ -64,22 +67,21 @@ type-checked GML layer.
 
 ## What gets generated
 
-By default the tool writes:
+Eight files, each independently placeable and switchable via `config.json`:
 
-```
-/out/
-  generated_schemas.gml // with all the schema types
-  generated_http.gml // with all the endpoints
-  generated_helpers.gml // with all the auxiliar functions
-```
+| Output | Default file | Contents |
+|---|---|---|
+| `code.schemas` | `generated_schemas.gml` | Constructors + `_validate` per schema |
+| `code.endPoints` | `generated_http.gml` | One wrapper function per operation |
+| `code.helpers` | `generated_helpers.gml` | Request struct, auth, cookie jar, URL encoding |
+| `controller.createEvent` | `controller_create.gml` | Controller object Create event |
+| `controller.cleanupEvent` | `controller_cleanup.gml` | Controller object Clean Up event |
+| `controller.httpAsyncEvent` | `controller_http.gml` | Controller object Async HTTP event |
+| `docs.schemas` | `schemas_codegen.js` | Feather doc partials for structs |
+| `docs.functions` | `function_codegen.js` | Feather doc partials for endpoints |
 
-and then a set of files that need to be placed inside a user created object (manager, `obj_<namespace>_core`)
-
-```
-controller_create.gml // copy into the create event
-controller_http.gml // copy into the HTTP async event
-controller_cleanup.gml // copy into the cleanup event
-```
+The three `controller.*` outputs are raw event bodies. Point them straight at the event files of
+your controller object (`obj_<prefix>_core`), or paste their contents into the matching events.
 
 ---
 
@@ -137,45 +139,91 @@ function gm_save_data_list(_offset = undefined, _count = undefined, _user_id = u
 
 ## Requirements
 
-* .NET SDK 8.0+ (build & run the tool)
+* .NET SDK 9.0+ (build & run the tool)
 * An OpenAPI 3.x document (JSON or YAML)
 
 
 ## Command-line usage
 
+`openapigen` is driven entirely by a config file — there is no direct-arguments mode.
+
 ```bat
-GMSwaggerCodeGen --input <file|url> --output <dir> [options]
+openapigen --config <path/to/config.json>   Generate from a config file
+openapigen --init <folder>                  Create config.json + JSON schema in a folder
+openapigen --help                           Show help
 
-Required:
-  -i, --input           Path or URL to OpenAPI 3.x spec (JSON or YAML)
-  -o, --output          Output directory for generated GML files
-
-Optional:
-      --prefix          The namespace prefix to be used (default: gm)
-
-General:
-  -?, -h, --help        Show help
-  -v, --version         Show version
+  -c, --config=VALUE   Path to JSON config file.
+  -i, --init=VALUE     Initialize a new config + schema in the given folder.
+  -h, --help           Show help.
 ```
 
-The prefix options feed the internal GmlNaming used during generation.
+Exit codes: `0` success, `1` bad arguments, `2` option parse error, `3` config not found,
+`5` config/schema error, `6` spec parse or validation error, `30` emitter failure,
+`98` init failure, `99` unhandled exception.
+
+## Configuration
+
+`openapigen --init .` writes a `config.json` next to an `openapigen.schema.json`, so any
+JSON-schema-aware editor gives you completion and validation. Every generated file has its own
+`outputFile`, resolved relative to `root`, which is itself relative to the config file. That lets
+you write straight into a GameMaker project tree:
+
+```json
+{
+  "$schema": "./openapigen.schema.json",
+  "input": "./openapi.json",
+  "root": "../MyGame",
+  "prefix": "gm",
+  "requireOperationId": true,
+  "code": {
+    "endPoints": { "enabled": true, "outputFile": "./scripts/gm_http/gm_http.gml" },
+    "schemas":   { "enabled": true, "outputFile": "./scripts/gm_schemas/gm_schemas.gml" },
+    "helpers":   { "enabled": true, "outputFile": "./scripts/gm_helpers/gm_helpers.gml" }
+  },
+  "controller": {
+    "createEvent":    { "enabled": true, "outputFile": "./objects/obj_gm_core/Create_0.gml" },
+    "cleanupEvent":   { "enabled": true, "outputFile": "./objects/obj_gm_core/CleanUp_0.gml" },
+    "httpAsyncEvent": { "enabled": true, "outputFile": "./objects/obj_gm_core/Other_62.gml" }
+  },
+  "docs": {
+    "schemas":   { "enabled": false, "outputFile": "./docs/schemas_codegen.js" },
+    "functions": { "enabled": false, "outputFile": "./docs/function_codegen.js" }
+  }
+}
+```
+
+| Key | Meaning |
+|---|---|
+| `input` | OpenAPI 3.x spec, JSON or YAML (detected from the extension) |
+| `root` | Base directory every `outputFile` resolves against |
+| `prefix` | Namespace prefix for generated symbols |
+| `requireOperationId` | Error when an operation has no `operationId` (default `true`) |
+| `<section>.<output>.enabled` | Set `false` to skip that file |
+| `<section>.<output>.outputFile` | Destination, relative to `root` |
+
+### Why `operationId` is required
+
+Generated function names are permanent public API, and `operationId` is the only stable,
+author-controlled source for them — a name derived from the URL changes whenever the path is
+refactored, silently breaking every caller, and derived names collide. The tool therefore reports
+each operation missing one and stops. For a third-party spec you cannot edit, set
+`"requireOperationId": false` to fall back to path-derived names.
 
 ## Examples
 
-Generate from a local JSON file
+Bootstrap a project and generate:
 
 ```bash
-./GMSwaggerCodeGen.exe -- \
-  --input ./openapi.json \
-  --output ./out \
-  --prefix 'gm'
+openapigen --init ./api
+# edit ./api/config.json, point "input" at your spec
+openapigen --config ./api/config.json
 ```
 
 ## Supported OpenAPI features
 
-* OpenAPI 3.x documents (JSON)
+* OpenAPI 3.x documents (JSON or YAML)
 * Operations & Parameters
-* Path / Query / Header params
+* Path / Query / Header / Cookie params
 * Required vs optional (optional → default undefined and validated only when defined)
 * Request bodies
 * Multiple media types supported; generates _content_type argument when needed
@@ -191,10 +239,11 @@ Generate from a local JSON file
 
 ## Limitations
 
-* oneOf / anyOf / discriminators are not yet emitted as unions in GML
-* Inline object schemas without a component id are treated as free-form Struct
-* XML/Protobuf bodies are ignored
-* File uploads/downloads require custom handling (depending on your HTTP layer)
+* `oneOf` / `anyOf` validate by trial, but are not emitted as distinct GML union types
+* `allOf` is not yet flattened into a merged constructor
+* XML / Protobuf bodies are ignored
+* Multipart file fields are base64-encoded; a server expecting raw binary parts needs a custom
+  converter registered with `<prefix>_request_body_set_converter`
 
 ## Configuration & naming
 
