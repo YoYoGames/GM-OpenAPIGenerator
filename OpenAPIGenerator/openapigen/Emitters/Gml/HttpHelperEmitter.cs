@@ -358,7 +358,7 @@ namespace openapigen.Emitters.Gml
                                         switch (s)
                                         {
                                             case IrAuthScheme.Basic:
-                                                caseBody.Line($"_header[? \"Authorization\"] = $\"Simple {{base64_encode(__{snIdent}_token__)}}\";");
+                                                caseBody.Line($"_header[? \"Authorization\"] = $\"Basic {{base64_encode(__{snIdent}_token__)}}\";");
                                                 break;
                                             case IrAuthScheme.Bearer:
                                             case IrAuthScheme.OAuth2:
