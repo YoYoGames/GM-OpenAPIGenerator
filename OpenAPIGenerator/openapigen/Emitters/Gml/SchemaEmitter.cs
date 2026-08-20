@@ -240,42 +240,59 @@ namespace openapigen.Emitters.Gml
     }
 
     /// <summary>
-    /// Maps IR types to GameMaker Feather JSDoc type names.
+    /// Which consumer a type annotation is written for. The two disagree about one thing only:
+    /// Feather, reading the JSDoc in the emitted .gml, spells a typed array <c>Array&lt;T&gt;</c>;
+    /// the gm-ext doc grammar behind the .js partials wants <c>Array[T]</c>. Square brackets are the
+    /// house convention across every GMEXT repository, and gm-ext's parser rejects a <c>Struct.</c>
+    /// prefix nested inside angle brackets outright rather than merely disliking it.
+    /// </summary>
+    internal enum JsDocFlavour
+    {
+        /// <summary>JSDoc inside the generated .gml, read by Feather.</summary>
+        Feather,
+
+        /// <summary>The gm-ext .js documentation partials.</summary>
+        GmExtDocs
+    }
+
+    /// <summary>
+    /// Maps IR types to GameMaker type names, in the spelling the target consumer expects.
     /// </summary>
     internal static class SchemaJsDoc
     {
         public static string ToJsDoc(IrValueSchema schema, GmlNaming n) => ToJsDoc(schema, n, null);
 
         /// <summary>
-        /// Renders a Feather type. Pass a <paramref name="resolver"/> so named schemas resolve to
+        /// Renders a type annotation. Pass a <paramref name="resolver"/> so named schemas resolve to
         /// what they actually are at runtime — an enum or a string alias is a String, not a struct.
         /// </summary>
-        public static string ToJsDoc(IrValueSchema schema, GmlNaming n, SchemaResolver? resolver) =>
-            ToJsDoc(schema, n, resolver, new HashSet<string>(StringComparer.Ordinal));
+        public static string ToJsDoc(IrValueSchema schema, GmlNaming n, SchemaResolver? resolver,
+                                     JsDocFlavour flavour = JsDocFlavour.Feather) =>
+            ToJsDoc(schema, n, resolver, new HashSet<string>(StringComparer.Ordinal), flavour);
 
         /// <summary>
         /// <paramref name="expanding"/> holds the named schemas above this point in the walk. A type
         /// that refers to itself is legitimate — a tree node whose children are nodes — and renders as
         /// its own name; without tracking it, expansion would not terminate.
         /// </summary>
-        private static string ToJsDoc(IrValueSchema schema, GmlNaming n, SchemaResolver? resolver, HashSet<string> expanding)
+        private static string ToJsDoc(IrValueSchema schema, GmlNaming n, SchemaResolver? resolver, HashSet<string> expanding, JsDocFlavour flavour)
         {
             return schema switch
             {
-                IrValueSchema.Simple s => TypeToJsDoc(s.Type, n, resolver, expanding),
-                IrValueSchema.OneOf o => Union(o.Options, n, resolver, expanding),
-                IrValueSchema.AnyOf a => Union(a.Options, n, resolver, expanding),
+                IrValueSchema.Simple s => TypeToJsDoc(s.Type, n, resolver, expanding, flavour),
+                IrValueSchema.OneOf o => Union(o.Options, n, resolver, expanding, flavour),
+                IrValueSchema.AnyOf a => Union(a.Options, n, resolver, expanding, flavour),
                 _ => "Any"
             };
         }
 
-        private static string Union(System.Collections.Immutable.ImmutableArray<IrValueSchema> options, GmlNaming n, SchemaResolver? resolver, HashSet<string> expanding)
+        private static string Union(System.Collections.Immutable.ImmutableArray<IrValueSchema> options, GmlNaming n, SchemaResolver? resolver, HashSet<string> expanding, JsDocFlavour flavour)
         {
-            var parts = options.Select(o => ToJsDoc(o, n, resolver, expanding)).Distinct().ToArray();
+            var parts = options.Select(o => ToJsDoc(o, n, resolver, expanding, flavour)).Distinct().ToArray();
             return parts.Length == 0 ? "Any" : string.Join("|", parts);
         }
 
-        private static string TypeToJsDoc(IrType t, GmlNaming n, SchemaResolver? resolver, HashSet<string> expanding)
+        private static string TypeToJsDoc(IrType t, GmlNaming n, SchemaResolver? resolver, HashSet<string> expanding, JsDocFlavour flavour)
         {
             return t switch
             {
@@ -293,28 +310,29 @@ namespace openapigen.Emitters.Gml
                     _ => "Any"
                 },
 
-                // Feather understands Array<T> for a known element type.
-                IrType.Array a => ElementOf(a, n, resolver, expanding) is { Length: > 0 } elem and not "Any"
-                    ? $"Array<{elem}>"
+                // Both consumers understand a typed array, but they spell it differently - see
+                // JsDocFlavour.
+                IrType.Array a => ElementOf(a, n, resolver, expanding, flavour) is { Length: > 0 } elem and not "Any"
+                    ? (flavour == JsDocFlavour.GmExtDocs ? $"Array[{elem}]" : $"Array<{elem}>")
                     : "Array",
 
-                // A nullable value can arrive absent, so Feather is told both shapes.
-                IrType.Nullable nn => $"{TypeToJsDoc(nn.Underlying, n, resolver, expanding)}|Undefined",
+                // A nullable value can arrive absent, so both shapes are stated.
+                IrType.Nullable nn => $"{TypeToJsDoc(nn.Underlying, n, resolver, expanding, flavour)}|Undefined",
 
-                IrType.Named named => NamedToJsDoc(named, n, resolver, expanding),
+                IrType.Named named => NamedToJsDoc(named, n, resolver, expanding, flavour),
 
                 _ => "Any"
             };
         }
 
-        private static string ElementOf(IrType.Array a, GmlNaming n, SchemaResolver? resolver, HashSet<string> expanding) =>
-            TypeToJsDoc(a.Element, n, resolver, expanding);
+        private static string ElementOf(IrType.Array a, GmlNaming n, SchemaResolver? resolver, HashSet<string> expanding, JsDocFlavour flavour) =>
+            TypeToJsDoc(a.Element, n, resolver, expanding, flavour);
 
         /// <summary>
         /// Structs render as <c>Struct.GmName</c>, which is what Feather expects. Enums and aliases
         /// are not structs at runtime, so they render as their underlying scalar type.
         /// </summary>
-        private static string NamedToJsDoc(IrType.Named named, GmlNaming n, SchemaResolver? resolver, HashSet<string> expanding)
+        private static string NamedToJsDoc(IrType.Named named, GmlNaming n, SchemaResolver? resolver, HashSet<string> expanding, JsDocFlavour flavour)
         {
             var structName = $"Struct.{n.StructPrefix}{named.Name}";
 
@@ -331,8 +349,8 @@ namespace openapigen.Emitters.Gml
                 return resolver.UnaliasDecl(decl) switch
                 {
                     IrSchema.Struct => structName,
-                    IrSchema.Enum en => TypeToJsDoc(en.Underlying, n, resolver, expanding),
-                    IrSchema.Alias al => ToJsDoc(al.Target, n, resolver, expanding),
+                    IrSchema.Enum en => TypeToJsDoc(en.Underlying, n, resolver, expanding, flavour),
+                    IrSchema.Alias al => ToJsDoc(al.Target, n, resolver, expanding, flavour),
                     _ => "Any"
                 };
             }

@@ -20,7 +20,32 @@ namespace openapigen.Emitters.Docs
                 w.Section("Schema Documentation (auto-generated, DO NOT EDIT)").Line();
                 foreach (var s in ir.Schemas.OfType<IrSchema.Struct>())
                     EmitSchemaDocs(s, w, naming, resolver);
+
+                EmitRequestDocs(w, naming);
             });
+        }
+
+        /// <summary>
+        /// The request struct is not a schema, but every generated callback receives one and the
+        /// endpoint partials all type that argument as it — so without a partial here, each of those
+        /// references is a link to a page that does not exist.
+        ///
+        /// Its methods are described in prose rather than listed: the documentation grammar has
+        /// <c>@member</c> for values and no equivalent for a member function.
+        /// </summary>
+        private static void EmitRequestDocs(GmlWriter w, GmlNaming n)
+        {
+            w.JsDoc(b =>
+            {
+                b.Line($"@struct_partial {n.StructPrefix}Request");
+                b.Line("@desc The in-flight HTTP request, handed to every callback as its third argument.");
+                b.Line("Call `retry()` on it to send the same request again — useful from a response hook that");
+                b.Line("has just refreshed a credential. `get_callback()` returns the callback it will invoke.");
+                b.Line($"@member {{Real}} attempts How many times this request has been sent, including retries.");
+                b.Line("@struct_end");
+            });
+
+            w.Line();
         }
 
         private static void EmitSchemaDocs(IrSchema.Struct s, GmlWriter w, GmlNaming n, SchemaResolver resolver)
@@ -33,7 +58,7 @@ namespace openapigen.Emitters.Docs
 
                 foreach (var f in StructSchemaEmitter.BuildFields(s))
                 {
-                    var jsType = SchemaJsDoc.ToJsDoc(f.Field.Schema, n, resolver);
+                    var jsType = SchemaJsDoc.ToJsDoc(f.Field.Schema, n, resolver, JsDocFlavour.GmExtDocs);
 
                     // The member name, not f.Arg. @member describes what the struct holds, so it
                     // takes the name the constructor assigns to — "userId", not the "_user_id"
@@ -85,7 +110,7 @@ namespace openapigen.Emitters.Docs
 
                 foreach (var a in args)
                 {
-                    var type = a.Schema is null ? "Any" : SchemaJsDoc.ToJsDoc(a.Schema, n, resolver);
+                    var type = a.Schema is null ? "Any" : SchemaJsDoc.ToJsDoc(a.Schema, n, resolver, JsDocFlavour.GmExtDocs);
                     var name = a.Required && a.Kind == EndpointArgKind.Parameter ? a.Name : $"[{a.Name}]";
                     js.Param(new ParamDoc(name, type, a.Description));
                 }
@@ -94,7 +119,7 @@ namespace openapigen.Emitters.Docs
                 // states plainly.
                 var responseType = ep.ResponseSchema is null
                     ? "Any"
-                    : $"{SchemaJsDoc.ToJsDoc(ep.ResponseSchema, n, resolver)}|Undefined";
+                    : $"{SchemaJsDoc.ToJsDoc(ep.ResponseSchema, n, resolver, JsDocFlavour.GmExtDocs)}|Undefined";
 
                 js.Line("");
                 js.Tag("event", "callback");
