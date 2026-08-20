@@ -1,3 +1,4 @@
+using codegencore.Model;
 using openapigen.Helpers;
 using openapigen.Model;
 
@@ -121,6 +122,60 @@ namespace openapigen.Parsing.Validation
                     IrSeverity.Error,
                     group.Key);
             }
+        }
+    }
+
+    /// <summary>
+    /// An alias must eventually name something concrete.
+    ///
+    /// <see cref="SchemaReferenceCycleRule"/> catches the cycles that exist in the document itself.
+    /// This is the same invariant one stage later, over the IR the parser actually built: any future
+    /// change to <c>BuildDecl</c>'s fallthrough could produce an alias whose target names the alias
+    /// again, and nothing downstream can render that — walking it is unbounded recursion, which is a
+    /// stack overflow rather than a catchable error. Reporting it here turns a crash into a message.
+    /// </summary>
+    public sealed class NoSelfReferentialAliasRule : IIrRule
+    {
+        public IEnumerable<IrDiagnostic> Validate(IrWebCompilation comp)
+        {
+            var byName = comp.Schemas.ToDictionary(s => s.Name, s => s, StringComparer.Ordinal);
+
+            foreach (var alias in comp.Schemas.OfType<IrSchema.Alias>())
+            {
+                if (!ResolvesToItself(alias, byName))
+                    continue;
+
+                yield return new IrDiagnostic(
+                    "IR_SYM_003",
+                    $"Schema '{alias.Name}' is an alias for itself, so it never names a concrete type. " +
+                    "This is a generator bug rather than a spec error — please report the spec that " +
+                    "produced it.",
+                    IrSeverity.Error,
+                    alias.Name);
+            }
+        }
+
+        private static bool ResolvesToItself(IrSchema.Alias alias, Dictionary<string, IrSchema> byName)
+        {
+            var seen = new HashSet<string>(StringComparer.Ordinal) { alias.Name };
+            var current = alias.Target;
+
+            while (current is IrValueSchema.Simple { Type: IrType.Named named })
+            {
+                if (string.Equals(named.Name, alias.Name, StringComparison.Ordinal))
+                    return true;
+
+                // A different cycle that never reaches this alias is not this rule's finding.
+                if (!seen.Add(named.Name) || !byName.TryGetValue(named.Name, out var next))
+                    return false;
+
+                if (next is not IrSchema.Alias link)
+                    return false;
+
+                current = link.Target;
+            }
+
+            return false;
         }
     }
 }

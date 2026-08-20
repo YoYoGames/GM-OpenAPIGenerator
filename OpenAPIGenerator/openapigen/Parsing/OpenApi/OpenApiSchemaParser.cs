@@ -371,18 +371,18 @@ namespace openapigen.Parsing.OpenApi
             if (IsSimplePrimitive(s))
                 return new IrValueSchema.Simple(ToPrimitiveType(s));
 
-            if (s.Type == JsonSchemaType.Array && s.Items is not null)
+            if (BareType(s) == JsonSchemaType.Array && s.Items is not null)
             {
                 var elemSchema = EnsureSchema(s.Items, ownerHint + "_item");
                 return new IrValueSchema.Simple(
-                    new IrType.Array(ExtractType(elemSchema))
+                    WithNullability(s, new IrType.Array(ExtractType(elemSchema)))
                 );
             }
 
             // Free-form object ({"type":"object"} with no properties): a plain GML struct map.
             // Declaring a named constructor for it would emit an empty struct plus a no-op validator.
             if (IsFreeFormObject(s))
-                return new IrValueSchema.Simple(IrType.AnyMap);
+                return new IrValueSchema.Simple(WithNullability(s, IrType.AnyMap));
 
             // inline complex schema → named
             if (!_ctx.InlineNames.TryGetValue(schema, out var name))
@@ -445,30 +445,59 @@ namespace openapigen.Parsing.OpenApi
         private static IrType ExtractType(IrValueSchema schema) =>
             schema is IrValueSchema.Simple s ? s.Type : IrType.Any;
 
+        /// <summary>
+        /// The declared type with JSON Schema's null marker masked off. JsonSchemaType is a [Flags]
+        /// enum, and both `nullable: true` and 3.1's ["string","null"] arrive as a union, so a type
+        /// test that compares for equality stops recognising a nullable value as the type it is.
+        /// Every type test below goes through this.
+        /// </summary>
+        private static JsonSchemaType? BareType(IOpenApiSchema s)
+        {
+            if (s.Type is not { } t) return null;
+
+            var bare = t & ~JsonSchemaType.Null;
+            return bare == 0 ? null : bare;
+        }
+
         private static bool IsPrimitive(IOpenApiSchema s) =>
-            s.Type is JsonSchemaType.String or JsonSchemaType.Integer or JsonSchemaType.Number or JsonSchemaType.Boolean;
+            BareType(s) is JsonSchemaType.String or JsonSchemaType.Integer or JsonSchemaType.Number or JsonSchemaType.Boolean;
 
         private static bool IsSimplePrimitive(IOpenApiSchema s) =>
             IsPrimitive(s) && (s.Enum is null || s.Enum.Count == 0);
 
         private static bool IsObjectLike(IOpenApiSchema s) =>
-            s.Type == JsonSchemaType.Object || s.Properties is { Count: > 0 };
+            BareType(s) == JsonSchemaType.Object || s.Properties is { Count: > 0 };
 
         /// <summary>An object with no declared properties and no typed additionalProperties.</summary>
         private static bool IsFreeFormObject(IOpenApiSchema s) =>
-            s.Type == JsonSchemaType.Object
+            BareType(s) == JsonSchemaType.Object
             && s.Properties is not { Count: > 0 }
             && s.AdditionalProperties is null
             && s.Enum is not { Count: > 0 };
 
-        private static IrType ToPrimitiveType(IOpenApiSchema s) => s.Type switch
+        /// <summary>
+        /// True when the declared type union includes null — `nullable: true` in 3.0, or an explicit
+        /// "null" member in a 3.1 type array.
+        /// </summary>
+        private static bool IsNullable(IOpenApiSchema s) =>
+            s.Type is { } declared && declared.HasFlag(JsonSchemaType.Null);
+
+        /// <summary>
+        /// Carries declared nullability into the IR rather than discarding it. Nullability is part of
+        /// the contract the spec states, and <see cref="IrType.Nullable"/> is what both the validator
+        /// emitter and the Feather renderer key off to relax a presence check.
+        /// </summary>
+        private static IrType WithNullability(IOpenApiSchema s, IrType t) =>
+            IsNullable(s) ? IrType.MakeNullable(t) : t;
+
+        private static IrType ToPrimitiveType(IOpenApiSchema s) => WithNullability(s, BareType(s) switch
         {
             JsonSchemaType.Boolean => IrType.Bool,
             JsonSchemaType.Integer => s.Format == "int64" ? IrType.Int64 : IrType.Int32,
             JsonSchemaType.Number => s.Format == "float" ? IrType.Float : IrType.Double,
             JsonSchemaType.String => s.Format is "binary" or "byte" ? IrType.Buffer : IrType.String,
             _ => IrType.Any
-        };
+        });
 
         private IOpenApiSchema Deref(IOpenApiSchema s) =>
             s is OpenApiSchemaReference r ? ResolveComponent(r.Reference.Id!) : s;

@@ -25,6 +25,13 @@ namespace openapigen.Helpers
         {
             var name = displayName is null ? expr : $"'{displayName}'";
 
+            // A nullable field may legitimately carry no value, and after json_parse that is
+            // indistinguishable from the field being absent — so nullability relaxes the presence
+            // check exactly the way optionality does. The payload check below is unchanged: when a
+            // value *is* there, it still has to be the declared type.
+            if (required && IsNullable(schema, resolver))
+                required = false;
+
             if (required)
             {
                 EmitRequired(w, expr, schema, resolver, n, whereVar, name, depth: 0);
@@ -34,6 +41,9 @@ namespace openapigen.Helpers
             w.If($"!is_undefined({expr})", body =>
                 EmitRequired(body, expr, schema, resolver, n, whereVar, name, depth: 0));
         }
+
+        private static bool IsNullable(IrValueSchema schema, SchemaResolver resolver) =>
+            resolver.Unalias(schema) is IrValueSchema.Simple s && s.Type is IrType.Nullable;
 
         private static void EmitRequired(
             GmlWriter w,

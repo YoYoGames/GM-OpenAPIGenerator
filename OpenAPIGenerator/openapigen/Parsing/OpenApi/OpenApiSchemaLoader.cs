@@ -3,6 +3,7 @@ using Microsoft.OpenApi.Reader;
 using Microsoft.OpenApi.YamlReader;
 using openapigen.Model;
 using openapigen.Parsing.Validation;
+using System.Collections.Immutable;
 
 namespace openapigen.Parsing.OpenApi
 {
@@ -33,11 +34,28 @@ namespace openapigen.Parsing.OpenApi
 
             ReportDiagnosticWarnings(result.Diagnostic, path);
 
+            // Before the parser touches a $ref: a circular one cannot be reported after the fact,
+            // because resolving it overflows the stack inside the reader.
+            ValidateDocument(doc);
+
             var comp = new OpenApiSchemaParser(doc).Build();
 
             Validate(comp, requireOperationId);
 
             return comp;
+        }
+
+        /// <summary>
+        /// Runs the document rules — the checks that have to happen before parsing, on input the
+        /// parser could not survive.
+        /// </summary>
+        private static void ValidateDocument(OpenApiDocument doc)
+        {
+            var validator = new DocumentValidator(
+                new SchemaReferenceCycleRule()
+            );
+
+            Report(validator.Validate(doc), "Document");
         }
 
         /// <summary>
@@ -53,10 +71,19 @@ namespace openapigen.Parsing.OpenApi
                 new NoDuplicateSchemaNamesRule(),
 
                 // Structure
-                new PathParamsDeclaredRule()
+                new PathParamsDeclaredRule(),
+                new NoSelfReferentialAliasRule()
             );
 
-            var diagnostics = validator.Validate(comp);
+            Report(validator.Validate(comp), "IR");
+        }
+
+        /// <summary>
+        /// Prints every diagnostic, then stops if any of them were errors. Both validation stages
+        /// report the same way, so a spec problem reads identically wherever it was caught.
+        /// </summary>
+        private static void Report(ImmutableArray<IrDiagnostic> diagnostics, string stage)
+        {
             if (diagnostics.Length == 0)
                 return;
 
@@ -67,7 +94,7 @@ namespace openapigen.Parsing.OpenApi
 
             var errors = diagnostics.Count(d => d.Severity == IrSeverity.Error);
             if (errors > 0)
-                throw new InvalidOperationException($"IR validation failed with {errors} error(s).");
+                throw new InvalidOperationException($"{stage} validation failed with {errors} error(s).");
         }
 
         /// <summary>Picks the reader format from the file extension; anything unknown is treated as JSON.</summary>
