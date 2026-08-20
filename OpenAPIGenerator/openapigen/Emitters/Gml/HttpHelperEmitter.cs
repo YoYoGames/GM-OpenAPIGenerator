@@ -123,8 +123,18 @@ namespace openapigen.Emitters.Gml
                 .Returns("Function"))
              .Function($"{n.Priv}request_body_get_converter", ["_content_type"], fn =>
              {
-                 fn.Assign("__instance__", $"{n.Priv}get_singleton(_GMFUNCTION_)", VariableScope.Local)
-                   .Return(r => r.Access("__instance__.type_converters", AccessorKind.Struct, "_content_type"));
+                 fn.Assign("__instance__", $"{n.Priv}get_singleton(_GMFUNCTION_)", VariableScope.Local);
+                 fn.Assign("__conv__", "__instance__.type_converters[$ _content_type]", VariableScope.Local);
+                 fn.If("!is_undefined(__conv__)", ifBody => ifBody.Line("return __conv__;")).Line();
+
+                 // RFC 6839 structured suffix: application/merge-patch+json and the rest are JSON on
+                 // the wire, so they serialise the same way. A registered converter still wins, so
+                 // one of these can be overridden individually.
+                 fn.Comment("a +json subtype is JSON, and serialises like it");
+                 fn.If("string_ends_with(_content_type, \"+json\")", ifBody =>
+                     ifBody.Line("return __instance__.type_converters[$ \"application/json\"];")).Line();
+
+                 fn.Return(r => r.Append("undefined"));
              }).Line();
 
             w.JsDoc(b => b

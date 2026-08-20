@@ -326,9 +326,10 @@ includes every GML reserved word and every **global** built-in variable (`fps`, 
 - OpenAPI 3.x documents (JSON or YAML)
 - Operations and parameters — path / query / header / cookie
 - Required vs optional (optional defaults to `undefined` and is validated only when defined)
-- Request bodies: `application/json`, `application/*+json`, `application/x-www-form-urlencoded`,
-  `multipart/form-data`, `text/plain`, `*/*`; a `_content_type` argument is generated when several
-  media types are allowed
+- Request bodies: `application/json`, `application/x-www-form-urlencoded`, `multipart/form-data`,
+  `text/plain`, `*/*`, and **any `application/…+json` subtype** (`merge-patch+json`, `hal+json`,
+  `problem+json`, …) — these serialise as JSON but keep their own media type on the request, since a
+  server dispatches on it. A `_content_type` argument is generated when several media types are allowed
 - Schemas: `#/components/schemas` objects become GML constructors; inline schemas are named from
   their owner
 - Scalars (`string`, `integer`, `number`, `boolean`), arrays, free-form objects, enums
@@ -339,6 +340,10 @@ includes every GML reserved word and every **global** built-in variable (`fps`, 
 
 - `oneOf` / `anyOf` validate by trial but are not emitted as distinct GML union types
 - `allOf` is not flattened into a merged constructor
+- **Media types are matched literally, so parameters are not understood.**
+  `application/json; charset=utf-8` is not recognised as JSON and its body is dropped with a warning.
+  Declare the bare type (`application/json`) in the spec. This is deliberate: stripping parameters
+  generally would also strip `multipart/form-data; boundary=…`, where the parameter is meaningful
 - OAuth 2 has no flow scaffolding — the stored token is injected as a Bearer credential
 - `input` must be a local file; URLs are not supported
 - XML / Protobuf bodies are ignored

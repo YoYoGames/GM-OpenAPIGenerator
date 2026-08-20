@@ -182,19 +182,48 @@ namespace openapigen.Parsing.OpenApi
         // REQUEST / RESPONSE
         // ====================================================================
 
-        private static readonly string[] PreferOrder =
+        /// <summary>Media types with a built-in converter, most preferred first.</summary>
+        private static readonly string[] ExactSupported =
         {
             "application/json",
-            "application/*+json",
             "application/x-www-form-urlencoded",
             "multipart/form-data",
             "text/plain",
             "*/*"
         };
 
+        /// <summary>
+        /// RFC 6839 structured suffix. <c>application/merge-patch+json</c>, <c>application/hal+json</c>
+        /// and the rest are JSON on the wire and serialise identically, so they are supported as a
+        /// family rather than enumerated. They keep their own media type on the request: a server
+        /// dispatches on it, and a merge-patch PATCH is not a plain JSON PATCH.
+        /// </summary>
+        private static bool IsJsonFamily(string mediaType) =>
+            mediaType.StartsWith("application/", StringComparison.OrdinalIgnoreCase) &&
+            mediaType.EndsWith("+json", StringComparison.OrdinalIgnoreCase);
+
+        private static bool IsSupportedMediaType(string mediaType) =>
+            ExactSupported.Contains(mediaType, StringComparer.OrdinalIgnoreCase) || IsJsonFamily(mediaType);
+
+        /// <summary>
+        /// Preference rank: exact JSON first, then the +json family, then the remaining exact types in
+        /// their declared order.
+        /// </summary>
+        private static int MediaTypeRank(string mediaType)
+        {
+            if (string.Equals(mediaType, "application/json", StringComparison.OrdinalIgnoreCase))
+                return 0;
+
+            if (IsJsonFamily(mediaType))
+                return 1;
+
+            var i = Array.FindIndex(ExactSupported, m => string.Equals(m, mediaType, StringComparison.OrdinalIgnoreCase));
+            return i < 0 ? int.MaxValue : i + 1;
+        }
+
         private IrRequestBody? PickBody(IOpenApiRequestBody rb, string ownerHint)
         {
-            var supported = rb.Content?.Where(c => PreferOrder.Contains(c.Key)).ToArray() ?? [];
+            var supported = rb.Content?.Where(c => IsSupportedMediaType(c.Key)).ToArray() ?? [];
             if (supported.Length == 0)
             {
                 // Don't let the body silently vanish from the generated signature.
@@ -203,11 +232,13 @@ namespace openapigen.Parsing.OpenApi
                     Console.Error.WriteLine(
                         $"[openapigen] warning: '{ownerHint}' declares only unsupported body media " +
                         $"type(s) [{string.Join(", ", declared)}]; no body parameter generated. " +
-                        $"Supported: {string.Join(", ", PreferOrder)}.");
+                        $"Supported: {string.Join(", ", ExactSupported)}, and any application/*+json " +
+                        $"subtype. Note a media type carrying parameters (\"application/json; charset=utf-8\") " +
+                        $"is matched literally and will not be recognised.");
                 return null;
             }
 
-            var mediaTypes = PreferOrder.Where(mt => supported.Any(s => s.Key == mt)).ToImmutableArray();
+            var mediaTypes = supported.Select(s => s.Key).OrderBy(MediaTypeRank).ToImmutableArray();
             var schema = supported.First(s => s.Key == mediaTypes[0]).Value.Schema!;
 
             return new IrRequestBody(
@@ -234,7 +265,14 @@ namespace openapigen.Parsing.OpenApi
                 {
                     if (!codeMatches(code)) continue;
 
-                    var mt = r.Content?.FirstOrDefault(c => PreferOrder.Contains(c.Key)).Value;
+                    // Same support rule as the request side, and best-ranked rather than whichever
+                    // the document happens to list first.
+                    var mt = r.Content?
+                        .Where(c => IsSupportedMediaType(c.Key))
+                        .OrderBy(c => MediaTypeRank(c.Key))
+                        .Select(c => c.Value)
+                        .FirstOrDefault();
+
                     if (mt?.Schema is null) continue;
 
                     return EnsureSchema(mt.Schema, ownerHint);
