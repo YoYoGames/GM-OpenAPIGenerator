@@ -208,13 +208,20 @@ namespace openapigen.Helpers
             return b.Kind switch
             {
                 BuiltinKind.String => $"!is_string({expr})",
-                BuiltinKind.Bool => $"!is_bool({expr})",
 
+                // GML has no bool literal discipline: 1 and 0 are what callers actually pass, and
+                // is_bool rejects both. json_parse does return real bools, so server data still
+                // validates either way.
+                BuiltinKind.Bool => $"!(is_bool({expr}) || {expr} == 0 || {expr} == 1)",
+
+                // is_numeric, not is_real: real is only GML's default numeric type, so is_real turns
+                // away an int64 read from a buffer or handed over by another system - a perfectly
+                // good integer for a field the spec calls one. See the GML reference.
                 BuiltinKind.Int8 or BuiltinKind.UInt8 or
                 BuiltinKind.Int16 or BuiltinKind.UInt16 or
                 BuiltinKind.Int32 or BuiltinKind.UInt32 or
                 BuiltinKind.Int64 or BuiltinKind.UInt64 or
-                BuiltinKind.Float32 or BuiltinKind.Float64 => $"!is_real({expr})",
+                BuiltinKind.Float32 or BuiltinKind.Float64 => $"!is_numeric({expr})",
 
                 // A GML buffer is a handle; buffer_exists is the only meaningful liveness check, but
                 // it throws on a string and reports true for any real matching a live buffer id, so
