@@ -344,6 +344,16 @@ includes every GML reserved word and every **global** built-in variable (`fps`, 
   `application/json; charset=utf-8` is not recognised as JSON and its body is dropped with a warning.
   Declare the bare type (`application/json`) in the spec. This is deliberate: stripping parameters
   generally would also strip `multipart/form-data; boundary=…`, where the parameter is meaningful
+- **Integers larger than 2^53 do not survive a JSON round-trip.** GameMaker's `json_parse` reads a
+  large integer correctly as an `int64`, but `json_stringify` writes it back as its own tagged string
+  (`"@i64@112210f47de98115$i64$"`) instead of a number — so receiving an object and echoing it back
+  corrupts any such value. Corruption begins exactly above 2^53 (9,007,199,254,740,992); anything at
+  or below round-trips fine, which covers epoch-millisecond timestamps by a factor of several
+  thousand. If your API uses 64-bit ids (snowflakes, large autoincrement keys), declare them as
+  `string` in the spec. Contributions welcome — the tag is recoverable, so the JSON converter could
+  rewrite it back to decimal
+- Whole numbers are serialised with a decimal point (`7.0`, not `7`), since GML has a single numeric
+  type. Valid JSON of equal value, and accepted by every server tested so far
 - OAuth 2 has no flow scaffolding — the stored token is injected as a Bearer credential
 - `input` must be a local file; URLs are not supported
 - XML / Protobuf bodies are ignored
