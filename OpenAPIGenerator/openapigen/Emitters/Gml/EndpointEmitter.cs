@@ -84,8 +84,8 @@ namespace openapigen.Emitters.Gml
                 fn.Comment("build url path");
                 fn.Assign(UrlVar, $"$\"{{{BaseUrlVar}}}{CleanPath(ep, args, n)}\"", VariableScope.Local).Line();
 
-                var paramExpr = EmitStructArg(fn, args, IrLocation.Query, ParamsVar, "create query params struct");
-                var headerExpr = EmitStructArg(fn, args, IrLocation.Header, HeadersVar, "create header params struct");
+                var paramExpr = EmitStructArg(fn, args, IrLocation.Query, ParamsVar, "create query params struct", resolver);
+                var headerExpr = EmitStructArg(fn, args, IrLocation.Header, HeadersVar, "create header params struct", resolver);
 
                 var secExpr = BuildSecurityExpr(ep.Auth);
                 if (secExpr != "undefined")
@@ -118,18 +118,53 @@ namespace openapigen.Emitters.Gml
             IReadOnlyList<EndpointArg> args,
             IrLocation location,
             string varName,
-            string comment)
+            string comment,
+            SchemaResolver resolver)
         {
             var matching = args.Where(a => a.Location == location).ToList();
             if (matching.Count == 0)
                 return "undefined";
 
-            var entries = matching.Select(a => $"{StructKey(a.SpecName)} : {a.Name}");
+            var entries = matching.Select(a => $"{StructKey(a.SpecName)} : {ValueExpr(a, resolver)}");
 
             fn.Comment(comment);
             fn.Assign(varName, "{ " + string.Join(", ", entries) + " }", VariableScope.Local).Line();
 
             return varName;
+        }
+
+        /// <summary>
+        /// The expression written into a query or header struct for one argument.
+        ///
+        /// Booleans need spelling out: GML has no boolean literal of its own, so `string(true)` is
+        /// "1" and a query would read `?flag=1`, which a strictly-typed server will not accept as a
+        /// boolean. The conversion is driven by the declared type rather than a runtime `is_bool`,
+        /// because a boolean argument also accepts 1 and 0 - testing the value would send the same
+        /// logical input two different ways.
+        /// </summary>
+        private static string ValueExpr(EndpointArg a, SchemaResolver resolver)
+        {
+            if (!IsBool(a.Schema, resolver))
+                return a.Name;
+
+            var spelled = $"({a.Name} ? \"true\" : \"false\")";
+
+            // Only a required argument without a default can never arrive undefined. For every other
+            // one, undefined has to survive: it is how _build_url and the header loop know to skip a
+            // parameter rather than send it empty.
+            return a.Required && a.DefaultLiteral is null
+                ? spelled
+                : $"(is_undefined({a.Name}) ? undefined : {spelled})";
+        }
+
+        /// <summary>True when the declared type is a boolean, nullable or not.</summary>
+        private static bool IsBool(IrValueSchema? schema, SchemaResolver resolver)
+        {
+            if (schema is null || resolver.Unalias(schema) is not IrValueSchema.Simple simple)
+                return false;
+
+            var type = simple.Type is IrType.Nullable nullable ? nullable.Underlying : simple.Type;
+            return type is IrType.Builtin { Kind: BuiltinKind.Bool };
         }
 
         /// <summary>
