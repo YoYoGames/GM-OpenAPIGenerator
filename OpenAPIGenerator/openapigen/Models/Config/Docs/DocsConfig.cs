@@ -14,6 +14,10 @@ namespace openapigen.Models.Config.Docs
         /// <summary>Endpoint function documentation partials.</summary>
         [JsonPropertyName("functions")]
         public DocsFunctionsConfig? Functions { get; set; } = new() { Enabled = false };
+
+        /// <summary>Module blocks grouping the partials above into documentation pages.</summary>
+        [JsonPropertyName("modules")]
+        public DocsModulesConfig? Modules { get; set; } = new() { Enabled = false };
     }
 
     /// <summary>Schema doc stubs.</summary>
@@ -30,5 +34,13 @@ namespace openapigen.Models.Config.Docs
         /// <inheritdoc />
         [JsonPropertyName("outputFile")]
         public override string OutputFile { get; set; } = "./function_codegen.js";
+    }
+
+    /// <summary>Module blocks tying the partials together.</summary>
+    public sealed class DocsModulesConfig : GeneratorConfigBase
+    {
+        /// <inheritdoc />
+        [JsonPropertyName("outputFile")]
+        public override string OutputFile { get; set; } = "./modules_codegen.js";
     }
 }

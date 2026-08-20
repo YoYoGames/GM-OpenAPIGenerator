@@ -44,6 +44,9 @@ namespace openapigen.Planning
             if (docs.Functions is { Enabled: true } docFunctions)
                 emitters.Add(("docs.functions", new DocsFunctionsEmitter(docFunctions.ToSettings(), naming)));
 
+            if (docs.Modules is { Enabled: true } docModules)
+                emitters.Add(("docs.modules", new DocsModulesEmitter(docModules.ToSettings(), naming)));
+
             return emitters;
         }
     }

@@ -71,6 +71,7 @@ namespace openapigen.Planning
             if (Raw.Controller.HttpAsyncEvent is { } f) yield return ("controller.httpAsyncEvent", f);
             if (Raw.Docs.Schemas is { } g) yield return ("docs.schemas", g);
             if (Raw.Docs.Functions is { } h) yield return ("docs.functions", h);
+            if (Raw.Docs.Modules is { } i) yield return ("docs.modules", i);
         }
     }
 }

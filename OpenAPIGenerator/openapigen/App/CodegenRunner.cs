@@ -127,6 +127,7 @@ namespace openapigen.App
                 "controller.httpAsyncEvent" => rc.Raw.Controller.HttpAsyncEvent?.OutputFile,
                 "docs.schemas" => rc.Raw.Docs.Schemas?.OutputFile,
                 "docs.functions" => rc.Raw.Docs.Functions?.OutputFile,
+                "docs.modules" => rc.Raw.Docs.Modules?.OutputFile,
                 _ => null
             };
 
