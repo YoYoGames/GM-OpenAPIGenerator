@@ -26,7 +26,7 @@ namespace openapigen.Parsing.OpenApi
             using var stream = new MemoryStream(File.ReadAllBytes(path));
             var result = OpenApiDocument.Load(stream, format: format, settings: settings);
 
-            // A document that parsed is usable even if it breaks validation rules — plenty of
+            // A document that parsed is usable even if it breaks validation rules - plenty of
             // real-world specs omit a required 'description'. Only a null document is fatal.
             var doc = result.Document
                       ?? throw new InvalidOperationException(
@@ -46,7 +46,7 @@ namespace openapigen.Parsing.OpenApi
         }
 
         /// <summary>
-        /// Runs the document rules — the checks that have to happen before parsing, on input the
+        /// Runs the document rules - the checks that have to happen before parsing, on input the
         /// parser could not survive.
         /// </summary>
         private static void ValidateDocument(OpenApiDocument doc)
@@ -59,7 +59,7 @@ namespace openapigen.Parsing.OpenApi
         }
 
         /// <summary>
-        /// Runs the IR rules and stops on any error, after reporting every diagnostic — one run
+        /// Runs the IR rules and stops on any error, after reporting every diagnostic - one run
         /// should surface all the problems, not just the first.
         /// </summary>
         private static void Validate(IrWebCompilation comp, bool requireOperationId)
@@ -123,7 +123,7 @@ namespace openapigen.Parsing.OpenApi
         }
 
         /// <summary>
-        /// Reports validation-rule violations without stopping generation — the document parsed, so
+        /// Reports validation-rule violations without stopping generation - the document parsed, so
         /// the emitters can work with it.
         /// </summary>
         private static void ReportDiagnosticWarnings(OpenApiDiagnostic? diagnostic, string path)
@@ -146,7 +146,7 @@ namespace openapigen.Parsing.OpenApi
             var text = string.Join(Environment.NewLine, shown);
 
             if (errors.Count > MaxReportedDiagnostics)
-                text += $"{Environment.NewLine}  … and {errors.Count - MaxReportedDiagnostics} more.";
+                text += $"{Environment.NewLine}  ... and {errors.Count - MaxReportedDiagnostics} more.";
 
             return text;
         }

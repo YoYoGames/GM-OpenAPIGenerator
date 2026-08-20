@@ -175,7 +175,7 @@ namespace codegencore.Writers.Lang
             return this;
         }
 
-        // Handy overload when you don’t care about modifiers
+        // Handy overload when you don't care about modifiers
         public SwiftWriter Func(string name, IEnumerable<SwiftParam> parameters, string? returnType, Action<SwiftWriter> body) => Func(name, parameters, returnType, modifiers: null, body);
 
         public SwiftWriter Init(IEnumerable<SwiftParam> parameters, IEnumerable<string>? modifiers, Action<SwiftWriter> body)

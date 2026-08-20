@@ -1,7 +1,7 @@
 # Contributing
 
 Thanks for taking a look. This is a code generator: it reads an OpenAPI 3.x document and emits GML.
-Almost everything worth knowing follows from that one fact — the output is source code somebody else
+Almost everything worth knowing follows from that one fact - the output is source code somebody else
 has to read and debug, so it is held to the same standard as hand-written code.
 
 ## Building
@@ -18,7 +18,7 @@ macOS to the `nightly` prerelease.
 
 ## Trying a change
 
-There is no test project — writing one means supplying an OpenAPI document to generate from, and that
+There is no test project - writing one means supplying an OpenAPI document to generate from, and that
 choice belongs to whoever writes it. In the meantime the practical regression check is a diff:
 
 ```bash
@@ -28,7 +28,7 @@ openapigen --config ./yourspec/config.json     # after
 ```
 
 and compare the generated `.gml`. **Most changes should produce no diff at all** on a spec that does
-not exercise them; a diff you did not expect is the finding. Use a real-world spec if you can — the
+not exercise them; a diff you did not expect is the finding. Use a real-world spec if you can - the
 interesting bugs have consistently come from shapes a small hand-written spec does not contain
 (nullable fields, `$ref` cycles, `+json` media types, cookie auth).
 
@@ -51,11 +51,11 @@ OpenAPIGenerator/
 **Policy lives in the validation layer, never in the parser.** The parser is a transform: it turns a
 document into IR and does not decide what is acceptable. Anything that should warn or stop the run is
 an `IIrRule` in `Parsing/Validation/` with a diagnostic code. A rule that has to run *before* the
-document is dereferenced is an `IDocumentRule` — see `IR_REF_001` for why that distinction exists.
+document is dereferenced is an `IDocumentRule` - see `IR_REF_001` for why that distinction exists.
 
 **There is one validator emitter.** `ValueSchemaValidatorEmitter` produces every runtime type check,
 for struct fields and endpoint arguments alike. If you need a different check, change it there rather
-than adding a second predicate somewhere else — this codebase has had the same bug fixed twice in two
+than adding a second predicate somewhere else - this codebase has had the same bug fixed twice in two
 places before, and once more in a third that was missed.
 
 **Generated GML must read as if a person wrote it.** Let `GmlWriter` handle indentation rather than

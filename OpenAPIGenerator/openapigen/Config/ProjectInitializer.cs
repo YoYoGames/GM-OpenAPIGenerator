@@ -44,7 +44,7 @@ namespace openapigen.Config
                 Console.WriteLine($"[openapigen] Wrote: {schemaPath}");
                 Console.WriteLine();
                 Console.WriteLine("Next steps:");
-                Console.WriteLine($"  1. Edit '{configFileName}' — set \"input\" to your OpenAPI spec path.");
+                Console.WriteLine($"  1. Edit '{configFileName}' - set \"input\" to your OpenAPI spec path.");
                 Console.WriteLine($"  2. Run: openapigen --config {configPath}");
                 return 0;
             }

@@ -98,7 +98,7 @@ namespace openapigen.Emitters.Gml
 
         /// <summary>
         /// A struct member is written bare only when the name is a legal, non-reserved GML
-        /// identifier; anything else — "weird-prop.name", or a keyword like "end" — must go through
+        /// identifier; anything else - "weird-prop.name", or a keyword like "end" - must go through
         /// the struct accessor.
         /// </summary>
         internal static string MemberRef(string fieldName) =>
@@ -109,7 +109,7 @@ namespace openapigen.Emitters.Gml
         internal sealed record CtorField(IrField Field, string Arg, string? Default);
 
         /// <summary>
-        /// Orders fields required-first and assigns each a unique constructor argument name —
+        /// Orders fields required-first and assigns each a unique constructor argument name -
         /// distinct spec fields can collapse onto the same snake_case name ("userId" / "user_id").
         /// </summary>
         internal static List<CtorField> BuildFields(IrSchema.Struct s)
@@ -146,7 +146,7 @@ namespace openapigen.Emitters.Gml
             {
                 // Without this the first field access fails inside the engine
                 // ("struct_get_from_hash argument 1 incorrect type"), and the caller never sees the
-                // message this function exists to produce. Only the struct path gets the guard —
+                // message this function exists to produce. Only the struct path gets the guard -
                 // enum, alias and composite validators are handed non-structs by design.
                 fn.Line($"if (!is_struct({ValidatorScaffold.InstVar})) " +
                         $"throw $\"{{{ValidatorScaffold.WhereVar}}} :: expected Struct.{structName}\";")
@@ -240,11 +240,8 @@ namespace openapigen.Emitters.Gml
     }
 
     /// <summary>
-    /// Which consumer a type annotation is written for. The two disagree about one thing only:
-    /// Feather, reading the JSDoc in the emitted .gml, spells a typed array <c>Array&lt;T&gt;</c>;
-    /// the gm-ext doc grammar behind the .js partials wants <c>Array[T]</c>. Square brackets are the
-    /// house convention across every GMEXT repository, and gm-ext's parser rejects a <c>Struct.</c>
-    /// prefix nested inside angle brackets outright rather than merely disliking it.
+    /// Which consumer a type annotation is written for. They differ on one thing: Feather spells a
+    /// typed array <c>Array&lt;T&gt;</c>, the gm-ext doc grammar wants <c>Array[T]</c>.
     /// </summary>
     internal enum JsDocFlavour
     {
@@ -264,7 +261,7 @@ namespace openapigen.Emitters.Gml
 
         /// <summary>
         /// Renders a type annotation. Pass a <paramref name="resolver"/> so named schemas resolve to
-        /// what they actually are at runtime — an enum or a string alias is a String, not a struct.
+        /// what they actually are at runtime - an enum or a string alias is a String, not a struct.
         /// </summary>
         public static string ToJsDoc(IrValueSchema schema, GmlNaming n, SchemaResolver? resolver,
                                      JsDocFlavour flavour = JsDocFlavour.Feather) =>
@@ -272,7 +269,7 @@ namespace openapigen.Emitters.Gml
 
         /// <summary>
         /// <paramref name="expanding"/> holds the named schemas above this point in the walk. A type
-        /// that refers to itself is legitimate — a tree node whose children are nodes — and renders as
+        /// that refers to itself is legitimate - a tree node whose children are nodes - and renders as
         /// its own name; without tracking it, expansion would not terminate.
         /// </summary>
         private static string ToJsDoc(IrValueSchema schema, GmlNaming n, SchemaResolver? resolver, HashSet<string> expanding, JsDocFlavour flavour)

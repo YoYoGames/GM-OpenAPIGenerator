@@ -11,14 +11,10 @@ namespace openapigen.Utils
     public static class FileEmitHelpers
     {
         /// <summary>
-        /// Writes a file using a language-specific writer.
-        ///
-        /// Emitted to a temporary file beside the destination and moved into place only once the
-        /// emitter has finished. Opening the destination directly would truncate it before the first
-        /// byte is written, so any emitter failure — exit code 30 treats those as expected — would
-        /// leave a half-written file where a working one used to be, and `root` normally points
-        /// straight at a .yyp tree. The temp sits in the same directory so the move is a rename
-        /// rather than a copy.
+        /// Writes a file through a language-specific writer, via a temp file in the same directory.
+        /// Emitter failure is an expected outcome (exit 30) and root often points straight at a .yyp
+        /// tree, so writing the destination directly would leave a truncated file where a working
+        /// one was.
         /// </summary>
         public static void WriteFile<TWriter>(
             string fullPath,

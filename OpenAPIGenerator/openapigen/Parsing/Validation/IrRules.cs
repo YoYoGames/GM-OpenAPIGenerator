@@ -54,17 +54,17 @@ namespace openapigen.Parsing.Validation
     }
 
     /// <summary>
-    /// Two operations must not ask for the same generated function name — GML has a single global
+    /// Two operations must not ask for the same generated function name - GML has a single global
     /// function scope, so one would shadow the other.
     ///
     /// The parser resolves the clash with a numeric suffix so the emitted file still compiles, which
     /// means the duplicate never survives into the IR. What survives is the *evidence*: an endpoint
     /// whose <c>operationId</c> no longer produces its own name was the loser of a collision. Checking
-    /// for that is what makes this rule reachable at all — grouping the finished IR by name cannot
+    /// for that is what makes this rule reachable at all - grouping the finished IR by name cannot
     /// work, because the parser has already made those names unique.
     ///
     /// Errors by default; a warning when <c>requireOperationId</c> is false, matching
-    /// <see cref="OperationIdRequiredRule"/> — that flag means a third-party spec the user cannot edit,
+    /// <see cref="OperationIdRequiredRule"/> - that flag means a third-party spec the user cannot edit,
     /// and making it ungeneratable would defeat its purpose. The rename is reported either way.
     /// </summary>
     public sealed class NoDuplicateEndpointNamesRule(bool required) : IIrRule
@@ -93,7 +93,7 @@ namespace openapigen.Parsing.Validation
                     "IR_SYM_001",
                     $"{claimants.Count} operations generate the same function name '{group.Key}': " +
                     string.Join(", ", claimants) + ". " +
-                    "Generated names are permanent public API and the suffix is positional — reordering " +
+                    "Generated names are permanent public API and the suffix is positional - reordering " +
                     "the spec would move it to a different operation. Give each a distinct operationId.",
                     required ? IrSeverity.Error : IrSeverity.Warning,
                     group.Key);
@@ -126,13 +126,9 @@ namespace openapigen.Parsing.Validation
     }
 
     /// <summary>
-    /// An alias must eventually name something concrete.
-    ///
-    /// <see cref="SchemaReferenceCycleRule"/> catches the cycles that exist in the document itself.
-    /// This is the same invariant one stage later, over the IR the parser actually built: any future
-    /// change to <c>BuildDecl</c>'s fallthrough could produce an alias whose target names the alias
-    /// again, and nothing downstream can render that — walking it is unbounded recursion, which is a
-    /// stack overflow rather than a catchable error. Reporting it here turns a crash into a message.
+    /// An alias must eventually name something concrete. <see cref="SchemaReferenceCycleRule"/>
+    /// catches this in the document; this is the same invariant over the IR the parser built, so a
+    /// future change to <c>BuildDecl</c> surfaces as a message rather than a stack overflow.
     /// </summary>
     public sealed class NoSelfReferentialAliasRule : IIrRule
     {
@@ -148,7 +144,7 @@ namespace openapigen.Parsing.Validation
                 yield return new IrDiagnostic(
                     "IR_SYM_003",
                     $"Schema '{alias.Name}' is an alias for itself, so it never names a concrete type. " +
-                    "This is a generator bug rather than a spec error — please report the spec that " +
+                    "This is a generator bug rather than a spec error - please report the spec that " +
                     "produced it.",
                     IrSeverity.Error,
                     alias.Name);

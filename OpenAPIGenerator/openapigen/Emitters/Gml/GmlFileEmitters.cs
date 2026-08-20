@@ -5,7 +5,7 @@ using openapigen.Utils;
 
 namespace openapigen.Emitters.Gml
 {
-    /// <summary>Endpoint wrapper functions — one per OpenAPI operation.</summary>
+    /// <summary>Endpoint wrapper functions - one per OpenAPI operation.</summary>
     public sealed class EndpointsEmitter(EmitterSettings settings, GmlNaming naming) : IIrEmitter
     {
         public void Emit(IrWebCompilation ir, string root)

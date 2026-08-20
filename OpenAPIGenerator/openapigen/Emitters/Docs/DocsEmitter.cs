@@ -26,12 +26,9 @@ namespace openapigen.Emitters.Docs
         }
 
         /// <summary>
-        /// The request struct is not a schema, but every generated callback receives one and the
-        /// endpoint partials all type that argument as it — so without a partial here, each of those
-        /// references is a link to a page that does not exist.
-        ///
-        /// Its methods are described in prose rather than listed: the documentation grammar has
-        /// <c>@member</c> for values and no equivalent for a member function.
+        /// The request struct is not a schema, but every callback is typed with it, so without a
+        /// partial each of those references links to a page that does not exist. Its methods go in
+        /// the description: the grammar has <c>@member</c> for values and no equivalent for methods.
         /// </summary>
         private static void EmitRequestDocs(GmlWriter w, GmlNaming n)
         {
@@ -39,7 +36,7 @@ namespace openapigen.Emitters.Docs
             {
                 b.Line($"@struct_partial {n.StructPrefix}Request");
                 b.Line("@desc The in-flight HTTP request, handed to every callback as its third argument.");
-                b.Line("Call `retry()` on it to send the same request again — useful from a response hook that");
+                b.Line("Call `retry()` on it to send the same request again - useful from a response hook that");
                 b.Line("has just refreshed a credential. `get_callback()` returns the callback it will invoke.");
                 b.Line($"@member {{Real}} attempts How many times this request has been sent, including retries.");
                 b.Line("@struct_end");
@@ -61,7 +58,7 @@ namespace openapigen.Emitters.Docs
                     var jsType = SchemaJsDoc.ToJsDoc(f.Field.Schema, n, resolver, JsDocFlavour.GmExtDocs);
 
                     // The member name, not f.Arg. @member describes what the struct holds, so it
-                    // takes the name the constructor assigns to — "userId", not the "_user_id"
+                    // takes the name the constructor assigns to - "userId", not the "_user_id"
                     // argument that supplies it. The GML side documents the constructor with
                     // @param and correctly uses f.Arg there.
                     var name = f.Field.Required ? f.Field.Name : $"[{f.Field.Name}]";

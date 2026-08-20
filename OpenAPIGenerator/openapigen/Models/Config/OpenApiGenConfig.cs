@@ -30,7 +30,7 @@ namespace openapigen.Models.Config
         /// Require every operation to declare an <c>operationId</c> (default: true).
         ///
         /// Generated function names are permanent public API. <c>operationId</c> is the only
-        /// author-controlled, stable source for them — names derived from the URL change whenever
+        /// author-controlled, stable source for them - names derived from the URL change whenever
         /// the path is refactored, and they collide. Set this to false only for a third-party spec
         /// you cannot edit; names then fall back to the path/verb/tag derivation.
         /// </summary>

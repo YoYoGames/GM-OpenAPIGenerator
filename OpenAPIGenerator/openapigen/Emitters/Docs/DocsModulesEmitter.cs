@@ -7,17 +7,9 @@ using System.Text;
 namespace openapigen.Emitters.Docs
 {
     /// <summary>
-    /// The module blocks that tie the generated partials together.
-    ///
-    /// <see cref="DocsFunctionsEmitter"/> and <see cref="DocsSchemasEmitter"/> emit
-    /// <c>@func_partial</c> and <c>@struct_partial</c> blocks, which describe an individual symbol but
-    /// place it nowhere. A partial that no module references is documented and unreachable. This
-    /// emitter produces the pages that reference them.
-    ///
-    /// References are written out one per function rather than as a glob. A glob only works when the
-    /// group name is a prefix of the function name, and these names are
-    /// <c>&lt;prefix&gt;_&lt;verb&gt;_&lt;noun&gt;</c> — so <c>*application*</c> would also capture
-    /// <c>get_application_configuration</c> and file it under the wrong page.
+    /// Emits the module pages that reference the generated partials; a partial no module references
+    /// is unreachable in the rendered docs. Refs are per-function rather than globs, because a glob
+    /// needs the group name to prefix the function name and these are prefix_verb_noun.
     /// </summary>
     public sealed class DocsModulesEmitter(EmitterSettings settings, GmlNaming naming) : IIrEmitter
     {
@@ -69,12 +61,9 @@ namespace openapigen.Emitters.Docs
         }
 
         /// <summary>
-        /// Groups the endpoints into pages.
-        ///
-        /// A spec that tags its operations has already stated how it wants to be organised, so the
-        /// tag wins. A spec with a single tag across every operation — or none at all — has said
-        /// nothing, and the first path segment is the next best statement of intent: it is the
-        /// resource the endpoint acts on, which is how REST references are conventionally arranged.
+        /// Groups the endpoints into pages. A tagged spec has stated how it wants to be organised;
+        /// one with a single tag or none has not, so the first path segment stands in - the resource
+        /// the endpoint acts on.
         /// </summary>
         private static List<(string Group, List<IrHttpEndpoint> Endpoints)> GroupEndpoints(IrWebCompilation ir)
         {

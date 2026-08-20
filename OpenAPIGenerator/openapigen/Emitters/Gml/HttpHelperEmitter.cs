@@ -111,7 +111,7 @@ namespace openapigen.Emitters.Gml
 
             w.JsDoc(b => b
                 .Param(new ParamDoc("_content_type", "String", null))
-                .Param(new ParamDoc("_function", "Function", "function(_body, _header_ds_map) → String|Id.Buffer")))
+                .Param(new ParamDoc("_function", "Function", "function(_body, _header_ds_map) -> String|Id.Buffer")))
              .Function($"{n.Pub}request_body_set_converter", ["_content_type", "_function"], fn =>
              {
                  fn.Assign("__instance__", $"{n.Priv}get_singleton(_GMFUNCTION_)", VariableScope.Local)

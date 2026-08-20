@@ -1,7 +1,7 @@
 ﻿namespace codegencore.Writers.JSDoc
 {
     /// <summary>
-    /// Builder‑style API for assembling JSDoc blocks fluently.
+    /// Builder-style API for assembling JSDoc blocks fluently.
     /// Call via <c>io.JsDoc(doc =&gt; doc.Summary("...").Param("x", "value"))</c>.
     /// </summary>
     public readonly record struct JsDocBuilder() : IJsDocSpec
@@ -9,7 +9,7 @@
         private readonly List<string> _lines = [];
         private readonly List<ParamDoc> _params = [];
 
-        /// <summary>Adds a free‑form line to the block.</summary>
+        /// <summary>Adds a free-form line to the block.</summary>
         public JsDocBuilder Line(string text)
         {
             var lines = text.Split(["\r\n", "\n", "\r"], StringSplitOptions.None);

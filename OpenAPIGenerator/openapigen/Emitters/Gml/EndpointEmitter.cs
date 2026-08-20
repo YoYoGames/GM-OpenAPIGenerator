@@ -134,13 +134,9 @@ namespace openapigen.Emitters.Gml
         }
 
         /// <summary>
-        /// The expression written into a query or header struct for one argument.
-        ///
-        /// Booleans need spelling out: GML has no boolean literal of its own, so `string(true)` is
-        /// "1" and a query would read `?flag=1`, which a strictly-typed server will not accept as a
-        /// boolean. The conversion is driven by the declared type rather than a runtime `is_bool`,
-        /// because a boolean argument also accepts 1 and 0 - testing the value would send the same
-        /// logical input two different ways.
+        /// The expression written into a query or header struct for one argument. Booleans are spelt
+        /// out because `string(true)` is "1" in GML. Driven by the declared type, not a runtime
+        /// `is_bool`: a boolean argument also accepts 1 and 0, which would then go out differently.
         /// </summary>
         private static string ValueExpr(EndpointArg a, SchemaResolver resolver)
         {
@@ -197,7 +193,7 @@ namespace openapigen.Emitters.Gml
                 policy.Alternatives[0].Requirements[0] is IrAuthRequirement.None)
                 return "undefined";
 
-            // Flatten to a unique list of scheme names — _apply_auth switches on each element as a string
+            // Flatten to a unique list of scheme names - _apply_auth switches on each element as a string
             var names = policy.Alternatives
                 .SelectMany(alt => alt.Requirements.OfType<IrAuthRequirement.Scheme>())
                 .Select(s => $"\"{s.SchemeName}\"")

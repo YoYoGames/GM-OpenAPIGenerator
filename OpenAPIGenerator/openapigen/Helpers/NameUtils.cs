@@ -58,12 +58,10 @@ namespace openapigen.Helpers
             return working.Trim('_').ToLowerInvariant();
         }
 
-
-
         /// <summary>
         /// True when <paramref name="s"/> can be written as a bare GML identifier. Callers that
-        /// emit a name into code must fall back to accessor syntax — <c>self[$ "end"]</c> for a
-        /// struct member, a quoted key in a struct literal — whenever this returns false.
+        /// emit a name into code must fall back to accessor syntax - <c>self[$ "end"]</c> for a
+        /// struct member, a quoted key in a struct literal - whenever this returns false.
         /// </summary>
         public static bool IsValidIdent(string s) => ident.IsMatch(s) && !Reserved.Contains(s);
 
@@ -99,26 +97,16 @@ namespace openapigen.Helpers
             "argument4","argument5","argument6","argument7","argument8","argument9",
             "argument10","argument11","argument12","argument13","argument14","argument15",
 
-            // ---------------------------------------------------------------
-            // Global built-in variables.
+            // Global built-ins. A constructor assigns to `self`, so these names resolve to the
+            // global instead of creating a member: "fps" is a compile error in the consumer's
+            // project, "health" silently writes the global and reading it back throws.
             //
-            // A constructor assigns to `self`, so `field = value` normally creates a struct member.
-            // These are the exception: the name resolves to the built-in global instead. Read-only
-            // ones ("fps") are a hard compile error in the consumer's project; writable ones
-            // ("health", "lives") silently write the global and never create the member, so reading
-            // it back throws.
+            // INSTANCE built-ins are deliberately absent and must not be added - inside a
+            // constructor `self` is the struct, so `id`, `x`, `y` and friends are ordinary members,
+            // and `id` alone appears in a large fraction of real schemas.
             //
-            // INSTANCE built-ins are deliberately NOT here and must not be added. Inside a
-            // constructor `self` is the struct, so `id`, `x`, `y`, `depth`, `speed`, `direction`,
-            // `sprite_index`, `alarm`, `layer` and friends become ordinary struct members. `id`
-            // alone appears in a large fraction of real-world schemas; reserving it would rewrite
-            // all of them to `self[$ "id"]` for no benefit.
-            //
-            // Completeness cannot be proven from here — GameMaker adds built-ins between runtime
-            // versions. Over-inclusion only costs readability (the member is emitted through the
-            // accessor); under-inclusion emits code that is silently wrong or does not compile. So
-            // this list errs toward inclusion, and new names should simply be appended.
-            // ---------------------------------------------------------------
+            // Err toward inclusion: over-inclusion only costs readability, under-inclusion emits
+            // code that is silently wrong. Append new names as GameMaker adds them.
 
             // Game state
             "score","lives","health","debug_mode","error_last","error_occurred","iap_data",
@@ -155,7 +143,6 @@ namespace openapigen.Helpers
             // Pointers
             "pointer_null","pointer_invalid",
         };
-
 
         public static string ParamName(string raw) => "_" + ToSnake(raw);
 

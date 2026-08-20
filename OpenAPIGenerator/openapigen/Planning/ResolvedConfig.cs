@@ -49,7 +49,7 @@ namespace openapigen.Planning
             if (clash is not null)
                 throw new InvalidOperationException(
                     $"Outputs {string.Join(" and ", clash.Select(d => $"'{d.Key}'"))} both resolve to " +
-                    $"'{clash.Key}'. Each output needs its own file — one would silently overwrite the other.");
+                    $"'{clash.Key}'. Each output needs its own file - one would silently overwrite the other.");
 
             // Escaping 'root' is suspicious rather than wrong: pointing root at a .yyp while sending
             // docs to a sibling folder is a reasonable layout. Say it out loud and continue.

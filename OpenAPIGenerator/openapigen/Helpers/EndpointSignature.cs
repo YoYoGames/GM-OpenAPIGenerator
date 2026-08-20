@@ -54,7 +54,7 @@ namespace openapigen.Helpers
         /// body / content-type / callback.
         /// </summary>
         /// <remarks>
-        /// Cookie parameters are deliberately excluded — the generated cookie jar captures and
+        /// Cookie parameters are deliberately excluded - the generated cookie jar captures and
         /// injects cookies automatically, so exposing them as arguments would be misleading.
         /// </remarks>
         public static List<EndpointArg> Build(IrHttpEndpoint ep)

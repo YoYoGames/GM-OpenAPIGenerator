@@ -1,21 +1,21 @@
-# GM-OpenAPIGenerator — OpenAPI → GML code generator
+# GM-OpenAPIGenerator - OpenAPI -> GML code generator
 
 **GM-OpenAPIGenerator** reads an OpenAPI 3.x specification (JSON or YAML) and generates a complete
 GameMaker Language (GML) HTTP client layer:
 
-- ✅ Strongly-typed **schema structs** with a runtime **validator** per schema
-- ✅ **Endpoint wrappers** that build URLs, serialise bodies, attach headers/query params,
+- Strongly-typed **schema structs** with a runtime **validator** per schema
+- **Endpoint wrappers** that build URLs, serialise bodies, attach headers/query params,
   inject credentials, and fire the request
-- ✅ An **auth layer** driven by `components.securitySchemes`
-- ✅ A transparent **cookie jar** and per-status-code **response hooks**
-- ✅ **Feather/JSDoc** documentation for every generated function and struct member
+- An **auth layer** driven by `components.securitySchemes`
+- A transparent **cookie jar** and per-status-code **response hooks**
+- **Feather/JSDoc** documentation for every generated function and struct member
 
 This lets you call web APIs directly from GameMaker through one consistent, type-checked GML layer.
 
-> ⚠️ GML has no namespaces. The generator uses a **configurable prefix** for public functions,
+> GML has no namespaces. The generator uses a **configurable prefix** for public functions,
 > private helpers, macros and struct names to avoid collisions.
 
-📖 **Full documentation lives in the [Wiki](https://github.com/YoYoGames/GM-OpenAPIGenerator/wiki).**
+**Full documentation lives in the [Wiki](https://github.com/YoYoGames/GM-OpenAPIGenerator/wiki).**
 
 ---
 
@@ -53,7 +53,7 @@ The binary lands at `openapigen\bin\Release\net9.0\openapigen.exe`.
 
 ```bat
 openapigen --init ./myapi
-# edit myapi/config.json — set "input" to your spec path
+# edit myapi/config.json - set "input" to your spec path
 openapigen --config ./myapi/config.json
 ```
 
@@ -63,7 +63,7 @@ into `obj_gm_core`'s Create, Async HTTP and Clean Up events. See
 
 ## Command-line usage
 
-`openapigen` is driven entirely by a config file — there is no direct-arguments mode, so every run
+`openapigen` is driven entirely by a config file - there is no direct-arguments mode, so every run
 is reproducible and reviewable.
 
 ```
@@ -81,7 +81,7 @@ openapigen --help                           Show help
 replacing it is what you meant. The schema file beside it is derived output and is refreshed either
 way, so re-running `--init` is how you pick up a schema change after upgrading the tool.
 
-> `-i` is `--init`. It is not `--input` — that mode, along with `--output`, `--prefix` and `--docs`,
+> `-i` is `--init`. It is not `--input` - that mode, along with `--output`, `--prefix` and `--docs`,
 > was removed in favour of the config file.
 
 Exit codes: `0` success, `1` bad arguments, `2` option parse error, `3` config not found,
@@ -130,9 +130,9 @@ directory. That lets you write straight into a GameMaker project tree:
 
 Three rules apply to the resolved paths:
 
-- **Two enabled outputs may not resolve to the same file** — an error (exit `5`), because emitters
+- **Two enabled outputs may not resolve to the same file** - an error (exit `5`), because emitters
   run in a fixed order and one output would silently overwrite the other.
-- **An output resolving outside `root` warns but proceeds** — it can be deliberate.
+- **An output resolving outside `root` warns but proceeds** - it can be deliberate.
 - **`~` expands only at the start of a path**; elsewhere it is an ordinary filename character.
 
 Comments (`//`) and trailing commas are accepted in `config.json`, but comments do not survive the
@@ -141,7 +141,7 @@ rewrite that patches the `$schema` key.
 ### Why `operationId` is required
 
 Generated function names are permanent public API, and `operationId` is the only stable,
-author-controlled source for them — a name derived from the URL changes whenever the path is
+author-controlled source for them - a name derived from the URL changes whenever the path is
 refactored, silently breaking every caller, and derived names collide (measured: 4 collisions in 261
 operations on a real spec). The tool therefore reports each operation missing one and stops. For a
 third-party spec you cannot edit, set `"requireOperationId": false` to fall back to path-derived
@@ -190,7 +190,7 @@ function GmApplicationConfiguration(_name, _type, _parent, _id = undefined, _des
 }
 ```
 
-Each schema also gets a **standalone validator function** — not a method on the struct:
+Each schema also gets a **standalone validator function** - not a method on the struct:
 
 ```gml
 function GmApplicationConfiguration_validate(__inst__, __where__ = _GMFUNCTION_)
@@ -217,7 +217,7 @@ Required fields are always checked, optional ones only when defined, and a neste
 validated by its own validator with the field name folded into the location string.
 
 > **Validators `throw` a plain string, not an exception struct.** In a `catch` block use
-> `is_struct(_e) ? _e.message : string(_e)` — reading `_e.message` directly will itself fail.
+> `is_struct(_e) ? _e.message : string(_e)` - reading `_e.message` directly will itself fail.
 
 ### Endpoint wrappers
 
@@ -266,7 +266,7 @@ gm_get_advanced_inventory_items(0, 20, undefined, "sword", function(_status, _da
 
 ### Auth, cookies and hooks
 
-The helpers file generates the credential store — you do not implement it:
+The helpers file generates the credential store - you do not implement it:
 
 ```gml
 gm_request_auth_set_token("auth_bearer", "eyJhbGci...");   // key is the scheme name from the spec
@@ -293,16 +293,16 @@ stops the run.
 
 | Code | Severity | Meaning |
 |---|---|---|
-| `IR_OP_001` | Error¹ | An operation has no `operationId` |
+| `IR_OP_001` | Error(1) | An operation has no `operationId` |
 | `IR_PATH_001` | Error | A path parameter is not present in its path template |
-| `IR_SYM_001` | Error¹ | Two operations ask for the same GML function name |
-| `IR_SYM_002` | Error² | Two schemas share a name |
+| `IR_SYM_001` | Error(1) | Two operations ask for the same GML function name |
+| `IR_SYM_002` | Error(2) | Two schemas share a name |
 
-¹ Downgraded to a warning when `"requireOperationId": false`.
-² Unreachable by construction; kept as an assertion.
+(1) Downgraded to a warning when `"requireOperationId": false`.
+(2) Unreachable by construction; kept as an assertion.
 
-Problems that do not prevent generation — a response missing its required `description`, for
-example — are reported as warnings and the run continues.
+Problems that do not prevent generation - a response missing its required `description`, for
+example - are reported as warnings and the run continues.
 
 ## Naming
 
@@ -313,27 +313,27 @@ example — are reported as warnings and the run continues.
 | `{Prefix}` | `Gm` | Struct constructor names |
 | `{PREFIX}_` | `GM_` | Macros and constants |
 
-An endpoint's name is `{prefix}_{snake(operationId)}` — **the tag is not involved**. Tags are only
+An endpoint's name is `{prefix}_{snake(operationId)}` - **the tag is not involved**. Tags are only
 used by the path-derived fallback that applies when `requireOperationId` is `false`.
 
-Struct members keep the spec's own casing; a member that is not a legal bare GML identifier — which
+Struct members keep the spec's own casing; a member that is not a legal bare GML identifier - which
 includes every GML reserved word and every **global** built-in variable (`fps`, `health`, `lives`,
-…) — is emitted through `self[$ "name"]`. Full rules in
+...) - is emitted through `self[$ "name"]`. Full rules in
 [Naming Conventions](https://github.com/YoYoGames/GM-OpenAPIGenerator/wiki/naming_conventions).
 
 ## Supported OpenAPI features
 
 - OpenAPI 3.x documents (JSON or YAML)
-- Operations and parameters — path / query / header / cookie
+- Operations and parameters - path / query / header / cookie
 - Required vs optional (optional defaults to `undefined` and is validated only when defined)
 - Request bodies: `application/json`, `application/x-www-form-urlencoded`, `multipart/form-data`,
-  `text/plain`, `*/*`, and **any `application/…+json` subtype** (`merge-patch+json`, `hal+json`,
-  `problem+json`, …) — these serialise as JSON but keep their own media type on the request, since a
+  `text/plain`, `*/*`, and **any `application/...+json` subtype** (`merge-patch+json`, `hal+json`,
+  `problem+json`, ...) - these serialise as JSON but keep their own media type on the request, since a
   server dispatches on it. A `_content_type` argument is generated when several media types are allowed
 - Schemas: `#/components/schemas` objects become GML constructors; inline schemas are named from
   their owner
 - Scalars (`string`, `integer`, `number`, `boolean`), arrays, free-form objects, enums
-- Security: `components.securitySchemes` plus per-operation requirements — Basic, Bearer, API key
+- Security: `components.securitySchemes` plus per-operation requirements - Basic, Bearer, API key
   (header / query / cookie), OAuth 2 and OpenID Connect
 
 ## Limitations
@@ -343,18 +343,18 @@ includes every GML reserved word and every **global** built-in variable (`fps`, 
 - **Media types are matched literally, so parameters are not understood.**
   `application/json; charset=utf-8` is not recognised as JSON and its body is dropped with a warning.
   Declare the bare type (`application/json`) in the spec. This is deliberate: stripping parameters
-  generally would also strip `multipart/form-data; boundary=…`, where the parameter is meaningful
+  generally would also strip `multipart/form-data; boundary=...`, where the parameter is meaningful
 - **Integers larger than 2^53 do not survive a JSON round-trip.** GameMaker's `json_parse` reads a
   large integer correctly as an `int64`, but `json_stringify` writes it back as its own tagged string
-  (`"@i64@112210f47de98115$i64$"`) instead of a number — so receiving an object and echoing it back
+  (`"@i64@112210f47de98115$i64$"`) instead of a number - so receiving an object and echoing it back
   corrupts any such value. Corruption begins exactly above 2^53 (9,007,199,254,740,992); anything at
   or below round-trips fine, which covers epoch-millisecond timestamps by a factor of several
   thousand. If your API uses 64-bit ids (snowflakes, large autoincrement keys), declare them as
-  `string` in the spec. Contributions welcome — the tag is recoverable, so the JSON converter could
+  `string` in the spec. Contributions welcome - the tag is recoverable, so the JSON converter could
   rewrite it back to decimal
 - Whole numbers are serialised with a decimal point (`7.0`, not `7`), since GML has a single numeric
   type. Valid JSON of equal value, and accepted by every server tested so far
-- OAuth 2 has no flow scaffolding — the stored token is injected as a Bearer credential
+- OAuth 2 has no flow scaffolding - the stored token is injected as a Bearer credential
 - `input` must be a local file; URLs are not supported
 - XML / Protobuf bodies are ignored
 - Multipart binary fields are base64-encoded with `Content-Transfer-Encoding: base64` rather than
@@ -379,7 +379,7 @@ You store them: `gm_request_auth_set_token("<scheme name>", "<token>")`, keyed b
 request that declares that scheme. A missing token logs a debug message and is skipped.
 
 **I see `Struct` in the docs. What is that in GML?**
-An arbitrary key→value map (a plain GML struct), not a typed constructor the generator created.
+An arbitrary key->value map (a plain GML struct), not a typed constructor the generator created.
 
 **Do I need to place the controller object in a room?**
 No. `_gm_get_singleton()` creates it on first use via `instance_create_depth`. Placing one yourself
@@ -387,7 +387,7 @@ as well gives you two controllers, each with its own request and hook maps.
 
 ## Contributing
 
-Issues and PRs are welcome — see [CONTRIBUTING.md](CONTRIBUTING.md) for how to build, how to check a
+Issues and PRs are welcome - see [CONTRIBUTING.md](CONTRIBUTING.md) for how to build, how to check a
 change without a test suite, and the conventions that matter (validation policy lives in the rule
 layer, there is exactly one validator emitter, and generated GML has to read as if a person wrote it).
 

@@ -1,11 +1,11 @@
 ﻿// -----------------------------------------------------------------------------
-//  Code‑Generation Intermediate Representation (IR)
+//  Code-Generation Intermediate Representation (IR)
 //  Full reference implementation with emitters that optimise buffer usage:
-//   • If a function has *no* parameters, the wrappers omit the args buffer.
-//   • If **all** parameters are doubles or strings, they’re passed directly
-//     (each as a <c>double</c> or <c>char*</c>) – no packing/unpacking cost.
-//   • If the return value maps to a double, no return buffer is used;
-//     otherwise a return‑buffer pair is appended to the call.
+//   - If a function has *no* parameters, the wrappers omit the args buffer.
+//   - If **all** parameters are doubles or strings, they're passed directly
+//     (each as a <c>double</c> or <c>char*</c>) - no packing/unpacking cost.
+//   - If the return value maps to a double, no return buffer is used;
+//     otherwise a return-buffer pair is appended to the call.
 // -----------------------------------------------------------------------------
 
 namespace codegencore.Helpers

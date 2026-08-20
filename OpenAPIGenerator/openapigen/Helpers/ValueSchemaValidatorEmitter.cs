@@ -26,7 +26,7 @@ namespace openapigen.Helpers
             var name = displayName is null ? expr : $"'{displayName}'";
 
             // A nullable field may legitimately carry no value, and after json_parse that is
-            // indistinguishable from the field being absent — so nullability relaxes the presence
+            // indistinguishable from the field being absent - so nullability relaxes the presence
             // check exactly the way optionality does. The payload check below is unchanged: when a
             // value *is* there, it still has to be the declared type.
             if (required && IsNullable(schema, resolver))
@@ -117,7 +117,7 @@ namespace openapigen.Helpers
         /// <summary>
         /// Every declared schema gets its own <c>&lt;Type&gt;_validate</c> function, so a named type
         /// is validated by calling it. That keeps the emitted code small and makes recursive schemas
-        /// work — the recursion happens at runtime, not during emission.
+        /// work - the recursion happens at runtime, not during emission.
         /// </summary>
         private static void EmitNamedSchemaValidation(
             GmlWriter w,

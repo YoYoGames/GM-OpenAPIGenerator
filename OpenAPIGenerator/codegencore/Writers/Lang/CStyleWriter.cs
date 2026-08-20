@@ -3,7 +3,7 @@ namespace codegencore.Writers.Lang
 {
     public class CStyleWriter<TSelf>(ICodeWriter io) : BaseWriter<TSelf>(io) where TSelf : CStyleWriter<TSelf>
     {
-        // keyword (expr) { … }
+        // keyword (expr) { ... }
         public TSelf Keyword(string keyword, string parenExpr, Action<TSelf> body)
             => Line($"{keyword} ({parenExpr})").Block(body).Line();
 

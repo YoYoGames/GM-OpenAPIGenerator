@@ -18,15 +18,12 @@ namespace openapigen.Parsing.OpenApi
             _doc = doc;
         }
 
-        // ====================================================================
         // ENTRY
-        // ====================================================================
-
         public IrWebCompilation Build()
         {
             // 0) Reserve the component namespace before anything is built. Inline names are minted
             //    *while* components are being walked, so a name synthesised for one component's
-            //    property could otherwise claim a component that has not been registered yet — and
+            //    property could otherwise claim a component that has not been registered yet - and
             //    EnsureDeclForComponent would then drop the real one on its ContainsKey guard.
             foreach (var name in _doc.Components?.Schemas?.Keys ?? [])
                 _ctx.ReservedSchemaNames.Add(name);
@@ -89,10 +86,7 @@ namespace openapigen.Parsing.OpenApi
             );
         }
 
-        // ====================================================================
         // ENDPOINTS
-        // ====================================================================
-
         private static ImmutableArray<string> Tags(OpenApiOperation op) =>
             op.Tags?.Select(t => t.Name)
                     .Where(n => !string.IsNullOrWhiteSpace(n))
@@ -178,10 +172,7 @@ namespace openapigen.Parsing.OpenApi
             return name;
         }
 
-        // ====================================================================
         // REQUEST / RESPONSE
-        // ====================================================================
-
         /// <summary>Media types with a built-in converter, most preferred first.</summary>
         private static readonly string[] ExactSupported =
         {
@@ -193,10 +184,9 @@ namespace openapigen.Parsing.OpenApi
         };
 
         /// <summary>
-        /// RFC 6839 structured suffix. <c>application/merge-patch+json</c>, <c>application/hal+json</c>
-        /// and the rest are JSON on the wire and serialise identically, so they are supported as a
-        /// family rather than enumerated. They keep their own media type on the request: a server
-        /// dispatches on it, and a merge-patch PATCH is not a plain JSON PATCH.
+        /// RFC 6839 structured suffix: <c>merge-patch+json</c> and friends are JSON on the wire, so
+        /// they are a family rather than a list. They keep their own media type on the request,
+        /// because the server dispatches on it.
         /// </summary>
         private static bool IsJsonFamily(string mediaType) =>
             mediaType.StartsWith("application/", StringComparison.OrdinalIgnoreCase) &&
@@ -250,7 +240,7 @@ namespace openapigen.Parsing.OpenApi
 
         /// <summary>
         /// Picks the success response schema. Prefers an explicit 2xx (including the "2XX" wildcard),
-        /// then falls back to "default" — many specs put the success body there and declare only
+        /// then falls back to "default" - many specs put the success body there and declare only
         /// error codes explicitly.
         /// </summary>
         private IrValueSchema? PickResponse(OpenApiResponses? reps, string ownerHint)
@@ -284,11 +274,7 @@ namespace openapigen.Parsing.OpenApi
 
         private static bool IsSuccessCode(string code) =>
             code.Length > 0 && code[0] == '2';
-
-        // ====================================================================
         // AUTH
-        // ====================================================================
-
         private IrAuthPolicy ResolveAuth(OpenApiOperation op)
         {
             if (op.Security is not null)
@@ -363,10 +349,7 @@ namespace openapigen.Parsing.OpenApi
             return set.OrderBy(x => x).ToImmutableArray();
         }
 
-        // ====================================================================
         // SCHEMAS
-        // ====================================================================
-
         private void EnsureDeclForComponent(string name, IOpenApiSchema schema)
         {
             if (_ctx.Decls.ContainsKey(name)) return;
@@ -422,7 +405,7 @@ namespace openapigen.Parsing.OpenApi
             if (IsFreeFormObject(s))
                 return new IrValueSchema.Simple(WithNullability(s, IrType.AnyMap));
 
-            // inline complex schema → named
+            // inline complex schema -> named
             if (!_ctx.InlineNames.TryGetValue(schema, out var name))
             {
                 name = MakeInlineName(ownerHint);
@@ -476,17 +459,13 @@ namespace openapigen.Parsing.OpenApi
             return new IrSchema.Alias(name, EnsureSchema(s, ownerHint), s.Description);
         }
 
-        // ====================================================================
         // HELPERS
-        // ====================================================================
-
         private static IrType ExtractType(IrValueSchema schema) =>
             schema is IrValueSchema.Simple s ? s.Type : IrType.Any;
 
         /// <summary>
         /// The declared type with JSON Schema's null marker masked off. JsonSchemaType is a [Flags]
-        /// enum, and both `nullable: true` and 3.1's ["string","null"] arrive as a union, so a type
-        /// test that compares for equality stops recognising a nullable value as the type it is.
+        /// enum, so `nullable: true` arrives as a union and an equality test stops recognising it.
         /// Every type test below goes through this.
         /// </summary>
         private static JsonSchemaType? BareType(IOpenApiSchema s)
@@ -514,16 +493,15 @@ namespace openapigen.Parsing.OpenApi
             && s.Enum is not { Count: > 0 };
 
         /// <summary>
-        /// True when the declared type union includes null — `nullable: true` in 3.0, or an explicit
+        /// True when the declared type union includes null - `nullable: true` in 3.0, or an explicit
         /// "null" member in a 3.1 type array.
         /// </summary>
         private static bool IsNullable(IOpenApiSchema s) =>
             s.Type is { } declared && declared.HasFlag(JsonSchemaType.Null);
 
         /// <summary>
-        /// Carries declared nullability into the IR rather than discarding it. Nullability is part of
-        /// the contract the spec states, and <see cref="IrType.Nullable"/> is what both the validator
-        /// emitter and the Feather renderer key off to relax a presence check.
+        /// Carries declared nullability into the IR: it is part of the contract the spec states, and
+        /// both the validator emitter and the Feather renderer key off <see cref="IrType.Nullable"/>.
         /// </summary>
         private static IrType WithNullability(IOpenApiSchema s, IrType t) =>
             IsNullable(s) ? IrType.MakeNullable(t) : t;
@@ -541,7 +519,7 @@ namespace openapigen.Parsing.OpenApi
             s is OpenApiSchemaReference r ? ResolveComponent(r.Reference.Id!) : s;
 
         /// <summary>
-        /// Resolves a "#/components/schemas/{id}" reference, naming the offender when it dangles —
+        /// Resolves a "#/components/schemas/{id}" reference, naming the offender when it dangles -
         /// a missing component otherwise surfaces as a bare NullReferenceException.
         /// </summary>
         private IOpenApiSchema ResolveComponent(string id)
@@ -564,7 +542,7 @@ namespace openapigen.Parsing.OpenApi
         /// </summary>
         /// <remarks>
         /// The counter is advanced past any name already taken by a declared component or an earlier
-        /// inline schema. Without that, a hint colliding with a component overwrote it — or, when the
+        /// inline schema. Without that, a hint colliding with a component overwrote it - or, when the
         /// inline was minted first, made the real component get dropped by
         /// <see cref="EnsureDeclForComponent"/>'s re-entry guard. An inline name is invented by this
         /// tool rather than chosen by the spec author, so shifting it is silent by design: there is no
@@ -604,7 +582,7 @@ namespace openapigen.Parsing.OpenApi
             internal readonly Dictionary<string, IrSchema> Decls = new();
 
             /// <summary>
-            /// Every schema name spoken for — declared components (seeded before anything is built)
+            /// Every schema name spoken for - declared components (seeded before anything is built)
             /// plus inline names already minted. Guards <see cref="MakeInlineName"/>.
             /// </summary>
             internal readonly HashSet<string> ReservedSchemaNames = new(StringComparer.Ordinal);

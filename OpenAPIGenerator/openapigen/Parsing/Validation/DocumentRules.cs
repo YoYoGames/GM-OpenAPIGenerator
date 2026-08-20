@@ -8,7 +8,7 @@ namespace openapigen.Parsing.Validation
     ///
     /// Most policy belongs in <see cref="IIrRule"/>, which sees a finished compilation and can talk
     /// about endpoints and schemas rather than JSON. A document rule exists for the narrower case of
-    /// input that cannot survive parsing at all — where the parser would fail before any IR exists to
+    /// input that cannot survive parsing at all - where the parser would fail before any IR exists to
     /// validate.
     /// </summary>
     public interface IDocumentRule
@@ -30,17 +30,11 @@ namespace openapigen.Parsing.Validation
     }
 
     /// <summary>
-    /// Rejects a cycle formed by components that are nothing but a <c>$ref</c> to another component.
-    ///
-    /// Such a cycle names no concrete type anywhere along the chain, so it could never be generated.
-    /// It also cannot be diagnosed after the fact: reading almost any member of a circular reference
-    /// makes Microsoft.OpenApi follow the chain to its target, and with a cycle that recursion does
-    /// not terminate. The result is a StackOverflowException, which .NET cannot catch — so the check
-    /// has to happen here, before the parser dereferences anything.
-    ///
-    /// Only whole-schema references form an edge. A schema that recurses through a <em>property</em> —
-    /// a tree node whose children are nodes — is legitimate and must not be reported; it reaches a
-    /// concrete object type, and the emitters handle it by emitting a call rather than inlining.
+    /// Rejects a cycle of components that are nothing but a <c>$ref</c> to the next: the chain never
+    /// reaches a concrete type. It has to run before the parser dereferences anything, because
+    /// resolving such a cycle recurses forever inside Microsoft.OpenApi and .NET cannot catch the
+    /// resulting StackOverflowException. Only whole-schema refs form an edge, so a schema that
+    /// recurses through a property is left alone.
     /// </summary>
     public sealed class SchemaReferenceCycleRule : IDocumentRule
     {
