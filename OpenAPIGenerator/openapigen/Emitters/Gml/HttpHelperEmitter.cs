@@ -211,13 +211,12 @@ namespace openapigen.Emitters.Gml
                                     });
                                 }).Line();
 
-                                inner.Comment("inject security");
-                                inner.Assign("__sec_count__", "is_array(security) ? array_length(security) : 0", VariableScope.Local);
-                                inner.For("var __i__ = 0", "__i__ < __sec_count__", "__i__++", loop =>
-                                    loop.Line($"__self__._apply_auth(__header__, __params__, security[__i__], where);")).Line();
-
                                 inner.Assign("__instance__", $"{n.Priv}get_singleton(where)", VariableScope.Local).Line();
 
+                                // Cookies are assembled before security for the same reason header
+                                // parameters are: an apiKey-in-cookie scheme appends to the Cookie
+                                // header, so it has to run after whatever else wrote one. Assembling
+                                // the jar afterwards would assign over the credential and drop it.
                                 inner.Comment("cookies: jar entries first, then per-request overrides");
                                 inner.Assign("__cookie_parts__", "[]",              VariableScope.Local)
                                      .Assign("__j__",            "0",              VariableScope.Local)
@@ -241,6 +240,11 @@ namespace openapigen.Emitters.Gml
                                 inner.If("__j__ > 0", ifBody =>
                                     ifBody.Line("__header__[? \"Cookie\"] = string_join_ext(\"; \", __cookie_parts__, 0, __j__);")).Line();
 
+                                inner.Comment("inject security");
+                                inner.Assign("__sec_count__", "is_array(security) ? array_length(security) : 0", VariableScope.Local);
+                                inner.For("var __i__ = 0", "__i__ < __sec_count__", "__i__++", loop =>
+                                    loop.Line($"__self__._apply_auth(__header__, __params__, security[__i__], where);")).Line();
+
                                 inner.Assign("__url__", "__self__._build_url(url, __params__)", VariableScope.Local).Line();
 
                                 inner.If("!is_undefined(raw_body)", ifBody =>
@@ -249,7 +253,13 @@ namespace openapigen.Emitters.Gml
                                     ifBody.Line("__header__[? \"Content-Type\"] = content_type;");
                                     ifBody.Assign("__processed__", "__self__._process_body(raw_body, content_type, __header__, where)", VariableScope.Local);
                                     ifBody.Line("__id__ = http_request(__url__, http_method, __header__, __processed__);");
-                                    ifBody.If("!is_string(__processed__)", elseBody =>
+
+                                    // Only a buffer the converter allocated is ours to free. The
+                                    // passthrough converters return the caller's own body untouched,
+                                    // and deleting that would destroy a buffer the game still owns -
+                                    // and break retry(), which sends raw_body again.
+                                    ifBody.Comment("free only a buffer the converter allocated, never the caller's");
+                                    ifBody.If("!is_string(__processed__) && __processed__ != raw_body", elseBody =>
                                         elseBody.Line("buffer_delete(__processed__);"));
                                 }, elseBody =>
                                 {
