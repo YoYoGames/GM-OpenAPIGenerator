@@ -387,12 +387,14 @@ as well gives you two controllers, each with its own request and hook maps.
 
 ## Contributing
 
-Issues and PRs are welcome.
+Issues and PRs are welcome — see [CONTRIBUTING.md](CONTRIBUTING.md) for how to build, how to check a
+change without a test suite, and the conventions that matter (validation policy lives in the rule
+layer, there is exactly one validator emitter, and generated GML has to read as if a person wrote it).
 
-- Follow the code style of the existing files
-- Add tests where practical
-- Keep emitters deterministic (stable output ordering)
-- Update the Wiki pages for new features
+Every pull request is built by CI, and pushes to `main` publish a self-contained build for Windows,
+Linux and macOS to the `nightly` prerelease.
+
+Security issues go through [SECURITY.md](SECURITY.md), not a public issue.
 
 ## Licence
 

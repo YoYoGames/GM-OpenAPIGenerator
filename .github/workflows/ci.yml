@@ -1,0 +1,31 @@
+name: CI
+
+on:
+  pull_request:
+  push:
+    branches-ignore:
+      - main
+  workflow_dispatch:
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v6
+
+      - uses: actions/setup-dotnet@v5
+        with:
+          dotnet-version: 9.x
+
+      - name: Build
+        run: |
+          cd OpenAPIGenerator
+          dotnet restore
+          dotnet build -c Release
+
+      # The build alone does not prove the binary starts - a bad entry point or a
+      # missing runtime asset only shows up when something actually runs it.
+      - name: Smoke - the tool runs
+        run: |
+          cd OpenAPIGenerator
+          dotnet run --project openapigen/openapigen.csproj -c Release --no-build -- --help
